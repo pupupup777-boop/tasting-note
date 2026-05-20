@@ -873,7 +873,6 @@ export default function TastingApp() {
           </div>
         )}
 
-        {}
         <div className={`transition-all duration-500 ${analysisResult ? 'opacity-100' : 'opacity-50 pointer-events-none hidden'}`}>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center">
