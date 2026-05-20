@@ -303,25 +303,35 @@ export default function TastingApp() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            contents: [{ parts: [{ text: `${searchQuery}의 역사, 특징, 그리고 시세를 아주 짧게 요약해줘.` }] }]
+          contents: [{ parts: [{ text: `"${searchQuery}"의 정보를 요약해줘. 반드시 다른 말은 하지 말고 딱 아래 양식의 JSON 형태로만 출력해줘.
+          양식:
+          {
+            "name": "술의 정확한 이름",
+            "summary": "역사와 특징을 정말 짧게 1~2줄 요약",
+            "tasting": "핵심적인 향과 맛 테이스팅 노트 요약",
+            "avgPrice": "대략적인 시중 가격대",
+            "bargainInfo": "최근 주류 매장이나 할인점 시세와 시기"
+          }` }] }],
+          // 🚀 구글 서버에게 JSON 타입으로만 답변하라고 강제하는 마법의 설정입니다!
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
         })
       });
       
       const data = await response.json();
       
-      // 콘솔 로그도 유지하되, 폰에서 바로 볼 수 있게 만듭니다.
-      console.log("AI가 보내준 응답 데이터:", data);
-      
       if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
-        setSearchResult(data.candidates[0].content.parts[0].text);
+        // AI가 보내준 JSON 텍스트를 컴퓨터가 읽을 수 있는 데이터로 변환합니다.
+        const parsedData = JSON.parse(data.candidates[0].content.parts[0].text);
+        setSearchResult(parsedData);
       } else if (data.error) {
-        // 🚀 구글 서버가 보낸 에러 메시지를 폰 화면에 바로 띄워줍니다!
-        alert(`구글 서버 에러 (${data.error.code}): ${data.error.message}`);
+        alert(`구글 에러: ${data.error.message}`);
       } else {
-        alert("알 수 없는 오류 발생: " + JSON.stringify(data));
+        alert("데이터를 읽어오지 못했습니다.");
       }
     } catch (e) {
-      alert("통신 에러: " + e.message);
+      alert("에러 발생: " + e.message);
     }
     setIsSearching(false);
   };
