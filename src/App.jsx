@@ -298,23 +298,23 @@ export default function TastingApp() {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
     try {
-      // 도구(tools) 설정을 잠시 빼고 순수하게 모델에게 질문합니다.
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+      // 🚨 gemini-1.5-pro를 gemini-1.5-flash로 다시 되돌렸습니다!
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: `${searchQuery}의 역사, 특징, 가격 정보를 짧게 요약해줘.` }] }]
+            contents: [{ parts: [{ text: `${searchQuery}의 역사, 특징, 최신 성지 가격 정보를 짧게 요약해줘.` }] }]
         })
       });
       
       const data = await response.json();
-      if (data.candidates) {
-          setSearchResult(data.candidates[0].content.parts[0].text);
+      if (data.candidates && data.candidates[0].content) {
+        setSearchResult(data.candidates[0].content.parts[0].text);
       } else {
-          alert("응답 형식 오류: " + JSON.stringify(data));
+        alert("검색 결과가 없습니다.");
       }
     } catch (e) {
-      alert("에러 상세 내용: " + e.message);
+      alert("에러: " + e.message);
     }
     setIsSearching(false);
   };
