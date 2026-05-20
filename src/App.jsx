@@ -612,10 +612,16 @@ export default function TastingApp() {
   };
 
   const handleSaveNote = async () => {
-    if (!analysisResult || !user) {
-      showToast("라벨 분석이 아직 완료되지 않았습니다.", "error");
+    if (!analysisResult) {
+      showToast("라벨 분석이 완료되지 않았습니다. 사진을 먼저 분석해 주세요.", "error");
       return;
     }
+    
+    if (!user) {
+      showToast("로그인 정보를 가져오는 중입니다. 잠시 후 다시 시도해 주세요.", "error");
+      return;
+    }
+
     setIsSaving(true);
     try {
       const smallImage = image ? await resizeImage(image, 300) : null;
