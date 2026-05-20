@@ -297,26 +297,24 @@ export default function TastingApp() {
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
-    setSearchResult(null);
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
+      // 도구(tools) 설정을 잠시 빼고 순수하게 모델에게 질문합니다.
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            contents: [{ parts: [{ text: `${searchQuery}의 역사, 특징, 최신 성지 가격 정보를 짧게 요약해줘.` }] }],
-            tools: [{ googleSearchRetrieval: {} }]
+          contents: [{ parts: [{ text: `${searchQuery}의 역사, 특징, 가격 정보를 짧게 요약해줘.` }] }]
         })
       });
       
-      if (!response.ok) {
-        throw new Error(`서버 응답 오류: ${response.status}`);
-      }
-      
       const data = await response.json();
-      setSearchResult(data.candidates[0].content.parts[0].text);
+      if (data.candidates) {
+          setSearchResult(data.candidates[0].content.parts[0].text);
+      } else {
+          alert("응답 형식 오류: " + JSON.stringify(data));
+      }
     } catch (e) {
-      // 🚀 여기가 중요! 에러 내용을 정확히 화면에 띄워줍니다.
-      alert("에러 상세 내용: " + e.message); 
+      alert("에러 상세 내용: " + e.message);
     }
     setIsSearching(false);
   };
