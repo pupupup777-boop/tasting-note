@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 const fallbackConfig = {
@@ -394,29 +394,35 @@ export default function TastingApp() {
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   const handleGoogleLogin = async () => {
-    try {
-      showToast("구글 로그인을 시도합니다...", "info");
-      if (user && user.isAnonymous) {
-         const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-         const newNickname = 'Google유저_' + Math.floor(1000 + Math.random() * 9000);
-         await setDoc(profileRef, { 
-             nickname: newNickname, 
-             createdAt: Date.now(),
-             provider: 'google'
-         }, { merge: true });
-         
-         setUserProfile(p => ({ ...p, nickname: newNickname }));
-         const updatedUser = { ...user, isAnonymous: false, email: "user@gmail.com" };
-         setUser(updatedUser); 
-         
-         setShowLoginModal(false);
-         showToast("Google 계정으로 로그인 성공!", "success");
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      showToast("로그인 중 오류가 발생했습니다.", "error");
-    }
-  };
+        try {
+          showToast("구글 로그인을 시도합니다...", "info");
+          
+          // 1. 진짜 구글 팝업창을 띄우는 파이어베이스 정석 문법 적용
+          const provider = new GoogleAuthProvider();
+          const result = await signInWithPopup(auth, provider);
+          const loggedInUser = result.user;
+          
+          // 2. 로그인 성공 시 내 정보 데이터베이스 동기화
+          const profileRef = doc(db, 'artifacts', appId, 'users', loggedInUser.uid, 'profile', 'info');
+          const finalNickname = loggedInUser.displayName || 'Google유저_' + Math.floor(1000 + Math.random() * 9000);
+          
+          await setDoc(profileRef, { 
+              nickname: finalNickname, 
+              createdAt: Date.now(),
+              provider: 'google'
+          }, { merge: true });
+          
+          setUserProfile(p => ({ ...p, nickname: finalNickname }));
+          setUser(loggedInUser); // 유저 상태 갱신
+          
+          setShowLoginModal(false);
+          showToast(`반갑습니다, ${finalNickname}님! 로그인 성공!`, "success");
+          
+        } catch (error) {
+          console.error("Login error:", error);
+          showToast("구글 인증에 실패했거나 취소되었습니다.", "error");
+        }
+      };
 
   const navigateTo = (view) => {
     setCurrentView(view);
