@@ -474,36 +474,78 @@ export default function TastingApp() {
   };
 
   const handleSaveNote = async () => {
-    if (!analysisResult || !user) return;
+    // 🚀 [디버깅 1단계] 함수 시작 확인
+    alert("🚨 디버깅: 1. 저장 함수 시작됨");
+
+    // 🚀 [디버깅 2단계] 필수 데이터 상태 점검
+    alert(`🚨 디버깅: 2. 데이터 점검 - 분석결과 존재: ${analysisResult ? 'O' : 'X'}, 유저 존재: ${user ? 'O (uid: '+user.uid+')' : 'X'}`);
+
+    // 원래 있던 조건문 (여기서 리턴되면 침묵의 리턴)
+    if (!analysisResult || !user) {
+        alert("🚨 디버깅 멈춤: 3. AI 분석 결과나 유저 정보가 없어서 실행이 중단됩니다. (null 조건에 걸림)");
+        return;
+    }
+
+    // 🚀 [디버깅 3단계] 조건 통과 후 데이터 생성 시작 확인
+    alert("🚨 디버깅: 4. 조건 통과, 저장 데이터 생성 시작");
+
     const newNote = {
       liquorType: selectedLiquorType,
-      analysisResult, ratings, selectedAromas,
-      personalNotes, overallRating, thumbnail: image,
+      analysisResult,
+      ratings,
+      selectedAromas,
+      personalNotes,
+      overallRating,
+      thumbnail: image, // 현재 압축된 이미지 (Base64)
       createdAt: Date.now()
     };
 
-    if (user.uid === 'local-test-user-999') {
-      showToast("로컬 테스트 모드: 성공적으로 저장되었습니다!");
-      setImage(null); setAnalysisResult(null); setPersonalNotes(''); setOverallRating(0); setShareToCommunity(false);
-      setCurrentView('community');
-      return;
-    }
+    // 🚀 [디버깅 4단계] 저장 데이터 최종 용량 점검
+    const dataSize = JSON.stringify(newNote).length;
+    alert(`🚨 디버깅: 5. 데이터 생성 완료 (최종 용량: ${dataSize} 바이트)`);
+
+    // 🚀 [디버깅 5단계] 파이어베이스 전송 직전 확인
+    alert(`🚨 디버깅: 6. 파이어베이스 컬렉션('users/${user.uid}/notes')으로 전송 시도 직전!!!`);
 
     try {
-      await addDoc(collection(db, 'users', user.uid, 'notes'), newNote);
+      // 파이어베이스 데이터베이스(Firestore)에 쓰기 시도
+      const docRef = await addDoc(collection(db, 'users', user.uid, 'notes'), newNote);
+      
+      // 🚀 [디버깅 6단계] 파이어베이스 저장 성공
+      alert("🚨 디버깅: 7. 파이어베이스 문서 저장 완.료! 생성된 문서 ID: " + docRef.id);
+
       if (shareToCommunity) {
+        // 🚀 [디버깅 7단계] 커뮤니티 공유 시도 확인
+        alert("🚨 디버깅: 8. 커뮤니티 공유 시도 중...");
         await addDoc(collection(db, 'community_posts'), {
           ...newNote,
-          userId: user.uid, userName: userProfile.nickname,
-          totalCommunityScore: 0, ratings: {}, comments: [],
-          isVerified: true, verificationCodeUsed: verificationCode
+          userId: user.uid,
+          userName: userProfile.nickname,
+          totalCommunityScore: 0,
+          ratings: {},
+          comments: [],
+          isVerified: true,
+          verificationCodeUsed: verificationCode
         });
+        // 🚀 [디버깅 8단계] 커뮤니티 공유 성공
+        alert("🚨 디버깅: 9. 커뮤니티 공유 완료!");
       }
-      showToast("노트가 기록되었습니다!");
-      setImage(null); setAnalysisResult(null); setPersonalNotes(''); setOverallRating(0); setShareToCommunity(false);
+
+      showToast("노트가 성공적으로 저장되었습니다!");
+      
+      // 상태 초기화 및 화면 이동
+      setImage(null);
+      setAnalysisResult(null);
+      setPersonalNotes('');
+      setOverallRating(0);
+      setShareToCommunity(false);
       setCurrentView('list');
+
     } catch (err) {
-      alert("데이터베이스 저장 오류: " + err.message);
+      // 🚀 [디버깅 9단계] 파이어베이스 전송 실패
+      console.error("저장 오류 상세:", err);
+      // alert창을 통해 에러 내용을 강력하게 표시!
+      alert("🚨 디버깅 실패: 10. 파이어베이스 최종 저장 거부!!! 에러내용: " + err.message + "\n(에러코드: " + err.code + ")");
     }
   };
 
