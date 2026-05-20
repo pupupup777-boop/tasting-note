@@ -1039,48 +1039,62 @@ export default function TastingApp() {
                </div>
 
                {/* 🛡️ 집단지성 실물인증 투표 판독판 UI */}
-               {post.verificationStatus === 'pending_vote' && (
-                 <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl">
-                   <div className="flex items-start gap-2.5">
-                     <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                     <div className="flex-1">
-                       <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 직접 수기로 마신 인증인가요?</h4>
-                       <p className="text-[11px] text-amber-900 leading-relaxed mb-3">
-                         AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요! (3명 이상 투표 및 동의율 50% 이상 시 실물인증 승격)
-                       </p>
-                       <div className="flex gap-2">
-                         <button 
-                           onClick={() => handleVoteVerification(post.id, 'yes')}
-                           disabled={post.votes?.voters?.[user?.uid] === 'yes'}
-                           className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
-                             post.votes?.voters?.[user?.uid] === 'yes'
-                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                               : 'bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 shadow-sm active:scale-95'
-                           }`}
-                         >
-                           👍 보인다! ({post.votes?.yesCount || 0})
-                         </button>
-                         <button 
-                           onClick={() => handleVoteVerification(post.id, 'no')}
-                           disabled={post.votes?.voters?.[user?.uid] === 'no'}
-                           className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
-                             post.votes?.voters?.[user?.uid] === 'no'
-                               ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                               : 'bg-white hover:bg-rose-50 text-rose-600 border border-gray-200 shadow-sm active:scale-95'
-                           }`}
-                         >
-                           👎 안 보인다 ({post.votes?.noCount || 0})
-                         </button>
+               {post.verificationStatus === 'pending_vote' && (() => {
+                 const hasVoted = post.votes?.voters?.[user?.uid] !== undefined;
+                 return (
+                   <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl">
+                     <div className="flex items-start gap-2.5">
+                       <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                       <div className="flex-1">
+                         <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 직접 수기로 마신 인증인가요?</h4>
+                         <p className="text-[11px] text-amber-900 leading-relaxed mb-3">
+                           AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요! (3명 이상 투표 및 동의율 50% 이상 시 실물인증 승격)
+                         </p>
+                         <div className="flex gap-2">
+                           <button 
+                             onClick={() => handleVoteVerification(post.id, 'yes')}
+                             disabled={hasVoted}
+                             className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+                               post.votes?.voters?.[user?.uid] === 'yes'
+                                 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                 : 'bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 shadow-sm active:scale-95'
+                             }`}
+                           >
+                             👍 보인다! ({post.votes?.yesCount || 0})
+                           </button>
+                           <button 
+                             onClick={() => handleVoteVerification(post.id, 'no')}
+                             disabled={hasVoted}
+                             className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
+                               post.votes?.voters?.[user?.uid] === 'no'
+                                 ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                                 : 'bg-white hover:bg-rose-50 text-rose-600 border border-gray-200 shadow-sm active:scale-95'
+                             }`}
+                           >
+                             👎 안 보인다 ({post.votes?.noCount || 0})
+                           </button>
+                         </div>
                        </div>
                      </div>
                    </div>
-                 </div>
-               )}
+                 );
+               })()}
 
                <div className="px-4 py-4 border-t bg-gray-50 flex justify-between items-center">
                   <div className="flex flex-col items-center">
                     <span className="text-[11px] text-gray-500 font-bold mb-2">부러움 평가 (드래그)</span>
-                    <FractionalStarRating value={post.ratings?.[user?.uid] || 0} onSave={(score) => handleRatePost(post.id, post.ratings, score)} />
+                    {(() => {
+                      const hasUserCommented = (post.comments || []).some(c => c.userId === user?.uid);
+                      const isRatingLocked = hasUserCommented && myRating > 0;
+
+                      return isRatingLocked ? (
+                        <div className="flex flex-col items-center p-1.5 bg-white border rounded-2xl px-5 shadow-sm border-amber-200/60 text-amber-800 font-bold text-xs gap-1">
+                          <span className="flex items-center gap-1">🔒 부러움 평가 완료 ({myRating.toFixed(1)}점)</span>
+                        </div>
+                      ) : (
+                        <FractionalStarRating value={myRating} onSave={(score) => handleRatePost(post.id, post.ratings, score)} />
+                      );
+                    })()}
                   </div>
                   <div className="flex flex-col items-center">
                     <span className="text-[10px] text-gray-400 font-bold mb-1">총 부러움</span>
