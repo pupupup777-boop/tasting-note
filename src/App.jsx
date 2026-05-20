@@ -231,55 +231,72 @@ export default function TastingApp() {
   const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.warn("Firebase Auth가 오프라인이거나 비활성화 상태입니다. 임시 로컬 모드로 가동합니다.");
-        setUser({ uid: 'local-test-user-999', isAnonymous: true });
-        setUserProfile(p => ({ ...p, nickname: '방문 테스터' }));
-      }
-    };
-
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    // 🚀 로그인 상태가 바뀔 때마다 실행되는 구글 공식 리스너입니다.
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
+        // 이미 로그인된 유저가 있다면 상태 업데이트
         setUser(currentUser);
       } else {
-        initAuth();
+        // 유저가 없다면(첫 접속) 자동으로 익명 로그인 시도
+        try { 
+          const userCredential = await signInAnonymously(auth); 
+          setUser(userCredential.user);
+        } catch (e) { 
+          console.error("Auth error", e);
+          alert("로그인 중 오류가 발생했습니다. 앱을 다시 켜주세요.");
+          // 테스트용 가상 유저 (인증 실패 시 임시 우회)
+          setUser({ uid: 'local-test-user-' + Date.now(), isAnonymous: true });
+        }
       }
     });
-
+    // 앱이 꺼질 때 리스너 해제 (메모리 관리)
     return () => unsubscribe();
   }, []);
 
+  // [수정 2] 유저가 확실히 결정된 후에만 데이터베이스 실시간 감시 시작
   useEffect(() => {
-    if (!user || user.uid === 'local-test-user-999') return;
+    // 유저 정보가 없거나, 아직 UID가 결정되지 않았다면 대기
+    if (!user || !user.uid) return;
     
+    // 1. 내 테이스팅 노트 데이터베이스 감시 시작 🚀
     const notesRef = collection(db, 'users', user.uid, 'notes');
     const unsubscribeNotes = onSnapshot(query(notesRef), (snapshot) => {
+      // 데이터가 바뀌면 자동으로 실행되어 화면을 새로고침합니다.
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => b.createdAt - a.createdAt);
-      setNotes(data);
+      data.sort((a, b) => b.createdAt - a.createdAt); // 최신순 정렬
+      setNotes(data); // 폰 화면 업데이트!
     });
 
+    // 2. 커뮤니티 라운지 데이터베이스 감시 시작 🚀
     const publicRef = collection(db, 'community_posts');
     const unsubscribeCommunity = onSnapshot(query(publicRef), (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setCommunityPosts(data);
+      setCommunityPosts(data); // 폰 화면 업데이트!
     });
 
+    // 앱이 꺼지거나 유저가 바뀔 때 감시 카메라 끄기
+    return () => { unsubscribeNotes(); unsubscribeCommunity(); };
+  }, [user]); // user 상태가 완벽히 결정되면 실행됩니다.
+
+  // [수정 3] 프로필 정보 및 랜덤 닉네임 생성 통합
+  useEffect(() => {
+    if (!user || !user.uid) return;
+    
+    // 내 프로필 정보 데이터베이스 감시 시작 🚀
     const profileRef = doc(db, 'users', user.uid);
     const unsubscribeProfile = onSnapshot(profileRef, (profileSnap) => {
       if (profileSnap.exists()) {
+        // 이미 닉네임이 있다면 가져오기
         setUserProfile((p) => ({ ...p, ...profileSnap.data() }));
       } else {
+        // 첫 접속이라면 랜덤 닉네임 생성해서 저장하기
         const randomNickname = '테이스터_' + Math.floor(1000 + Math.random() * 9000);
         setDoc(profileRef, { nickname: randomNickname, createdAt: Date.now() });
         setUserProfile((p) => ({ ...p, nickname: randomNickname }));
       }
     });
 
-    return () => { unsubscribeNotes(); unsubscribeCommunity(); unsubscribeProfile(); };
+    return () => unsubscribeProfile();
   }, [user]);
 
   const userStats = useMemo(() => {
