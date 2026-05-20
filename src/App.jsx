@@ -170,7 +170,11 @@ const resizeImage = (base64Str, maxWidth = 400) => {
   });
 };
 
-const Icon = ({ name, className = "w-5 h-5", ...props }) => {
+const Icon = ({ name, className = "", ...props }) => {
+  // w- 와 h- 클래스가 인자로 명확히 들어오지 않은 경우에만 디폴트 크기인 w-5 h-5를 바인딩하여 거대해지는 현상을 철벽 방어
+  const hasSize = className.includes('w-') || className.includes('h-');
+  const finalClass = `${hasSize ? '' : 'w-5 h-5'} ${className}`.trim();
+
   const icons = {
     Camera: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9zM15 13a3 3 0 11-6 0 3 3 0 016 0z" />,
     Upload: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />,
@@ -205,7 +209,7 @@ const Icon = ({ name, className = "w-5 h-5", ...props }) => {
 
   return (
     <svg 
-      className={className} 
+      className={finalClass} 
       fill="none" 
       stroke="currentColor" 
       viewBox="0 0 24 24" 
@@ -464,6 +468,7 @@ export default function TastingApp() {
     setSearchResult(null);
 
     if (isApiKeyMissing) {
+      // ⚠️ 실시간 조회 전환 안내를 위해 시뮬레이션 모드로 친절하게 안내 및 데이터 바인딩
       setTimeout(() => {
         let mockResult = {
           name: `${searchQuery} (Taster's Choice)`,
@@ -570,6 +575,7 @@ export default function TastingApp() {
     setError(null);
 
     if (isApiKeyMissing) {
+      // ⚠️ 실시간 AI 연동을 완료하기 전까지, 오작동으로 오해하지 않으시도록 합리적 모크 데이터 연동
       setTimeout(() => {
         let mockLabel = {
           name: "발베니 12년 더블우드 (The Balvenie 12 Year DoubleWood)",
@@ -579,7 +585,7 @@ export default function TastingApp() {
           grape: "버번 오크통 & 셰리 오크통 (Double Wood)",
           producer: "발베니 증류소 (The Balvenie Distillery)",
           detectedCategory: "whiskey",
-          isCodeDetected: shareToCommunity
+          isCodeDetected: shareToCommunity // 체크박스를 켰으면 코드가 매치된 것으로 시뮬레이션 지원
         };
 
         if (selectedLiquorType === "wine") {
@@ -597,6 +603,7 @@ export default function TastingApp() {
 
         setAnalysisResult(mockLabel);
 
+        // 🚀 자동 주종 감지 보정 동기화
         if (mockLabel.detectedCategory && mockLabel.detectedCategory !== selectedLiquorType) {
           setSelectedLiquorType(mockLabel.detectedCategory);
         }
@@ -661,6 +668,7 @@ export default function TastingApp() {
         const parsed = JSON.parse(result.candidates[0].content.parts[0].text);
         setAnalysisResult(parsed);
 
+        // 🚀 [주종 자동 보정] 선택한 주종과 다른 경우 스마트하게 탭 및 테마 동적 전환
         if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
           if (LIQUOR_CONFIG[parsed.detectedCategory]) {
             setSelectedLiquorType(parsed.detectedCategory);
