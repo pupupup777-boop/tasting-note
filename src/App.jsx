@@ -14,7 +14,7 @@ const firebaseConfig = {
   appId: "1:597973066423:web:cd9b1bea283855c30ca332",
   measurementId: "G-VLN1Y7FWR5"
 };
-
+const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY;
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -297,42 +297,51 @@ export default function TastingApp() {
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
-    setSearchResult(null);
-    
-    // AI 연동 시뮬레이션 (프론트엔드에서 API키 노출을 막기 위해 가상 데이터 반환)
-    setTimeout(() => {
-        setSearchResult({
-            name: searchQuery,
-            summary: `${searchQuery}은(는) 전 세계적으로 사랑받는 훌륭한 주류입니다. 긴 역사와 전통적인 제조 방식을 자랑합니다.`,
-            tasting: "풍부한 바닐라 향과 달콤한 과일 향이 어우러지며, 부드럽고 긴 피니시를 선사합니다.",
-            avgPrice: "약 150,000원 ~ 350,000원",
-            bargainInfo: "최근 남대문 주류상가에서 2024년 5월 기준 약 18만원에 거래된 기록이 있습니다."
-        });
-        setIsSearching(false);
-    }, 1500);
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${searchQuery}의 역사, 테이스팅 노트(향과 맛), 그리고 시세 정보를 매우 짧게 요약해줘.` }] }]
+        })
+      });
+      const data = await response.json();
+      setSearchResult(data.candidates[0].content.parts[0].text);
+    } catch (e) {
+      alert("검색 실패!");
+    }
+    setIsSearching(false);
   };
 
   const triggerFileInput = () => fileInputRef.current?.click();
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => {
+    reader.onloadend = async () => {
       setImage(reader.result);
       setIsAnalyzing(true);
-      setVerificationCode('CODE-' + Math.floor(1000 + Math.random() * 9000));
-      // 라벨 AI 분석 시뮬레이션
-      setTimeout(() => {
-        setAnalysisResult({
-          name: "테스트 보틀", type: LIQUOR_CONFIG[selectedLiquorType].name,
-          region: "테스트 지역", vintage: "2024", grape: "테스트 품종", producer: "테스트 양조장"
+      
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [
+              { text: "이 술 라벨의 이름, 종류(와인/위스키/사케/맥주), 지역, 빈티지(혹은 숙성연수), 포도품종(혹은 캐스크/홉), 생산자를 JSON으로 추출해줘." },
+              { inlineData: { mimeType: "image/jpeg", data: reader.result.split(',')[1] } }
+            ]}]
+          })
         });
+        const data = await response.json();
+        const text = data.candidates[0].content.parts[0].text;
+        setAnalysisResult(JSON.parse(text.replace(/```json/g, '').replace(/```/g, '')));
         const initialRatings = {};
-        LIQUOR_CONFIG[selectedLiquorType].criteria.forEach(c => initialRatings[c.id] = 0);
-        setRatings(initialRatings);
-        setExpandedAromaCategory(LIQUOR_CONFIG[selectedLiquorType].aromas[0].category);
         setIsAnalyzing(false);
-      }, 1500);
+      } catch (e) {
+        alert("분석 실패! API 키를 확인하세요.");
+        setIsAnalyzing(false);
+      }
     };
     reader.readAsDataURL(file);
   };
