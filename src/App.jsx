@@ -297,24 +297,31 @@ export default function TastingApp() {
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
+    setSearchResult(null);
     try {
-      // 🚨 gemini-1.5-pro를 gemini-1.5-flash로 다시 되돌렸습니다!
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            contents: [{ parts: [{ text: `${searchQuery}의 역사, 특징, 최신 성지 가격 정보를 짧게 요약해줘.` }] }]
+            contents: [{ parts: [{ text: `${searchQuery}의 역사, 특징, 그리고 시세를 아주 짧게 요약해줘.` }] }]
         })
       });
       
       const data = await response.json();
-      if (data.candidates && data.candidates[0].content) {
+      
+      // 콘솔 로그도 유지하되, 폰에서 바로 볼 수 있게 만듭니다.
+      console.log("AI가 보내준 응답 데이터:", data);
+      
+      if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
         setSearchResult(data.candidates[0].content.parts[0].text);
+      } else if (data.error) {
+        // 🚀 구글 서버가 보낸 에러 메시지를 폰 화면에 바로 띄워줍니다!
+        alert(`구글 서버 에러 (${data.error.code}): ${data.error.message}`);
       } else {
-        alert("검색 결과가 없습니다.");
+        alert("알 수 없는 오류 발생: " + JSON.stringify(data));
       }
     } catch (e) {
-      alert("에러: " + e.message);
+      alert("통신 에러: " + e.message);
     }
     setIsSearching(false);
   };
