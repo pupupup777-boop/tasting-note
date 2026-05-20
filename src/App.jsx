@@ -337,37 +337,86 @@ export default function TastingApp() {
   };
 
   const triggerFileInput = () => fileInputRef.current?.click();
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onloadend = async () => {
       setImage(reader.result);
       setIsAnalyzing(true);
+      setVerificationCode('CODE-' + Math.floor(1000 + Math.random() * 9000));
       
       try {
+        // 1. 이미지 데이터를 구글 AI가 읽을 수 있는 Base64 데이터로 추출합니다.
+        const base64Data = reader.result.split(',')[1];
+        
+        // 2. 현재 사용자가 선택한 주종(와인, 위스키 등)의 설정 정보를 가져옵니다.
+        const config = LIQUOR_CONFIG[selectedLiquorType];
+        
+        // 3. 구글 최신형 gemini-2.5-flash 모델에 이미지 분석을 요청합니다.
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ parts: [
-              { text: "이 술 라벨의 이름, 종류(와인/위스키/사케/맥주), 지역, 빈티지(혹은 숙성연수), 포도품종(혹은 캐스크/홉), 생산자를 JSON으로 추출해줘." },
-              { inlineData: { mimeType: "image/jpeg", data: reader.result.split(',')[1] } }
-            ]}]
+            contents: [{
+              parts: [
+                { text: `이 술 라벨 사진을 분석해서 정보를 추출해줘. 반드시 다른 설명은 일절 하지 말고, 아래 예시와 완벽히 똑같은 규격의 JSON 데이터 하나만 답변으로 돌려줘야 해.
+                분석할 주종: ${config.name}
+                필수 반환 JSON 규격:
+                {
+                  "name": "제품의 영문 혹은 국문 이름 (예: Chateau Margaux)",
+                  "type": "세부 종류 혹은 스타일 (예: Red Wine, Single Malt Whiskey, IPA, 준마이)",
+                  "region": "생산 국가 및 구체적인 지역 (예: France Bordeaux, Scotland Highlands)",
+                  "vintage": "생산 연도 혹은 숙성 연수 (예: 2018, 12 Years, 정보가 전혀 없으면 null)",
+                  "grape": "핵심 원재료, 품종, 혹은 특징 (예: Cabernet Sauvignon, Sherry Cask, Citra Hop)",
+                  "producer": "생산자 혹은 와이너리/증류소/양조장 이름 (예: Chateau Margaux, Macallan)"
+                }` },
+                { inlineData: { mimeType: "image/jpeg", data: base64Data } }
+              ]
+            }],
+            // AI 답변 형식을 강제로 JSON 타입으로 지정하여 데이터가 깨지는 현상을 완벽 차단합니다!
+            generationConfig: {
+              responseMimeType: "application/json"
+            }
           })
         });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error?.message || "서버 응답 오류");
+        }
+
         const data = await response.json();
-        const text = data.candidates[0].content.parts[0].text;
-        setAnalysisResult(JSON.parse(text.replace(/```json/g, '').replace(/```/g, '')));
-        const initialRatings = {};
-        setIsAnalyzing(false);
-      } catch (e) {
-        alert("분석 실패! API 키를 확인하세요.");
+        
+        if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts[0].text) {
+          const rawJsonText = data.candidates[0].content.parts[0].text;
+          const parsedResult = JSON.parse(rawJsonText);
+          
+          // 4. 분석 결과 데이터를 화면에 보여주는 상태값에 입력합니다.
+          setAnalysisResult(parsedResult);
+          
+          // 5. [매우 중요] 맛 평가(Palate) 슬라이더들이 깨지지 않도록 초기 값인 0으로 세팅합니다.
+          const initialRatings = {};
+          config.criteria.forEach(c => initialRatings[c.id] = 0);
+          setRatings(initialRatings);
+          
+          // 6. 아로마(향기) 카테고리의 첫 번째 항목을 자동으로 펼쳐서 보여줍니다.
+          setExpandedAromaCategory(config.aromas[0].category);
+          
+          showToast("라벨 분석을 완료했습니다!", "success");
+        } else {
+          alert("AI가 사진 속 라벨을 정확히 인지하지 못했습니다. 밝은 곳에서 다시 찍어보세요!");
+        }
+      } catch (error) {
+        console.error("라벨 분석 오류:", error);
+        alert("라벨 분석에 실패했습니다: " + error.message);
+      } finally {
         setIsAnalyzing(false);
       }
     };
     reader.readAsDataURL(file);
   };
+
 
   const handleSaveNote = async () => {
     if (!analysisResult || !user) return;
