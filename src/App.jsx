@@ -375,6 +375,7 @@ export default function TastingApp() {
     setIsMenuOpen(false);
   };
 
+  // 보틀 백과사전 & 최신 시세 검색 기능 (Google Search Grounding 접목)
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
@@ -403,6 +404,7 @@ export default function TastingApp() {
         }
       };
 
+      // 🚀 [정밀 수리 완료] 누락되었던 ${GEMINI_API_KEY} 연동 및 안정적인 2.5 정식 모델로 통일
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
