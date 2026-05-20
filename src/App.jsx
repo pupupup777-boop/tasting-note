@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Camera, Upload, ChevronRight, Check, Loader2, Wine, Star, Info, ChevronDown, ChevronUp, Menu, X, List as ListIcon, BarChart3, PlusCircle, Search, SortDesc, DollarSign, Users, MessageSquare, Heart, ShieldCheck, Award, Send, Beer, Coffee, BookOpen, MapPin } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, onSnapshot, query, doc, deleteDoc, setDoc, updateDoc, arrayUnion, increment } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 const fallbackConfig = {
   apiKey: "AIzaSyDfsow7Q73INwwaFylX4De6LwKrmEDovcE",
@@ -19,9 +18,20 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Use a unique app ID that safely formats any dynamic workspace slash characters
+// Safe app UID binding
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'wine-tasting-app';
 const appId = rawAppId.replace(/\//g, '_');
+
+// VITE env standard binding with dynamic fallback
+const GEMINI_API_KEY = (() => {
+  try {
+    return import.meta.env.VITE_GEMINI_API_KEY || "";
+  } catch (e) {
+    return "";
+  }
+})();
+
+const isApiKeyMissing = !GEMINI_API_KEY || GEMINI_API_KEY.trim() === "";
 
 const LIQUOR_CONFIG = {
   wine: {
@@ -122,7 +132,43 @@ const getThemeClasses = (theme) => {
   return map[theme] || map.rose;
 };
 
-const resizeImage = (base64Str, maxWidth = 400) => {
+const Icon = ({ name, className = "w-5 h-5" }) => {
+  const icons = {
+    Camera: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9zM15 13a3 3 0 11-6 0 3 3 0 016 0z" />,
+    Menu: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />,
+    X: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />,
+    PlusCircle: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 0v2m0-2h2m-2 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    ChevronDown: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />,
+    ChevronUp: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />,
+    Award: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />,
+    ShieldCheck: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />,
+    Search: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />,
+    Users: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />,
+    Wine: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v10m0 0a4 4 0 11-8 0m8 0a4 4 0 118 0M6 22h12M12 12v10" />,
+    Star: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.907c.961 0 1.36 1.246.588 1.81l-3.974 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.97-2.888c-.77-.564-.372-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />,
+    DollarSign: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    Info: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    BookOpen: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />,
+    MapPin: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+        <circle cx="12" cy="11" r="3" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+      </>
+    ),
+    Send: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />,
+    Check: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />,
+    Loader2: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />,
+    List: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />,
+    BarChart3: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M18 17V9M13 17V5M8 17v-7" />
+  };
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      {icons[name] || <circle cx="12" cy="12" r="10" strokeWidth="2" />}
+    </svg>
+  );
+};
+
+const compressImage = (base64Str, maxWidth = 400) => {
   return new Promise((resolve) => {
     let img = new Image();
     img.onload = () => {
@@ -181,9 +227,9 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
             const fillPercentage = Math.max(0, Math.min(1, displayValue - (star - 1))) * 100;
             return (
               <div key={star} className="relative w-8 h-8 text-gray-300 drop-shadow-sm">
-                <Star className="w-8 h-8 absolute top-0 left-0" />
+                <Icon name="Star" className="w-8 h-8 absolute top-0 left-0" />
                 <div className="absolute top-0 left-0 overflow-hidden text-amber-400" style={{ width: `${fillPercentage}%` }}>
-                  <Star className="w-8 h-8 fill-current" />
+                  <Icon name="Star" className="w-8 h-8 fill-current" />
                 </div>
               </div>
             );
@@ -193,41 +239,14 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
   );
 };
 
-const CustomIcon = ({ name, className = 'w-6 h-6' }) => {
-  const icons = {
-    Camera: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9zM15 13a3 3 0 11-6 0 3 3 0 016 0z" />,
-    Menu: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />,
-    X: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />,
-    PlusCircle: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 0v2m0-2h2m-2 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />,
-    ChevronDown: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />,
-    ChevronUp: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />,
-    Award: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />,
-    ShieldCheck: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />,
-    Search: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />,
-    Users: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />,
-    Wine: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v10m0 0a4 4 0 11-8 0m8 0a4 4 0 118 0M6 22h12M12 12v10" />,
-    Star: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.907c.961 0 1.36 1.246.588 1.81l-3.974 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.97-2.888c-.77-.564-.372-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />,
-    DollarSign: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
-    Info: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
-    BookOpen: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />,
-    MapPin: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><circle cx="12" cy="11" r="3" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />,
-    Send: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-  };
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      {icons[name] || <circle cx="12" cy="12" r="10" strokeWidth="2" />}
-    </svg>
-  );
-};
-
 export default function TastingApp() {
   const [user, setUser] = useState(null);
   const [notes, setNotes] = useState([]);
-  const [currentView, setCurrentView] = useState('add');
+  const [currentView, setCurrentView] = useState('community'); // default to lounge community
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
-  // Community & Profile States
+  // Community & Profiles
   const [userProfile, setUserProfile] = useState({ nickname: '', badge: '🥚 알콜 입문자' });
   const [communityPosts, setCommunityPosts] = useState([]);
   const [communityFilter, setCommunityFilter] = useState('all');
@@ -237,7 +256,7 @@ export default function TastingApp() {
   const [commentInputs, setCommentInputs] = useState({});
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // Add Form States
+  // Form State
   const [selectedLiquorType, setSelectedLiquorType] = useState('wine');
   const [image, setImage] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -251,7 +270,7 @@ export default function TastingApp() {
   const [expandedAromaCategory, setExpandedAromaCategory] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Search/Encyclopedia States
+  // Search Grounding
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -432,7 +451,7 @@ export default function TastingApp() {
         }
       };
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, { 
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(payload) 
@@ -460,7 +479,7 @@ export default function TastingApp() {
 
     const reader = new FileReader();
     reader.onloadend = async () => {
-      const compressed = await resizeImage(reader.result, 400);
+      const compressed = await compressImage(reader.result, 400);
       setImage(compressed); 
       analyzeLabel(compressed);
     };
@@ -511,7 +530,7 @@ export default function TastingApp() {
     };
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${import.meta.env.VITE_GEMINI_API_KEY}`, { 
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(payload) 
@@ -566,7 +585,7 @@ export default function TastingApp() {
     }
     setIsSaving(true);
     try {
-      const smallImage = image ? await resizeImage(image, 300) : null;
+      const smallImage = image ? await compressImage(image, 300) : null;
       
       let verificationStatus = 'ai_verified';
       if (shareToCommunity) {
@@ -763,7 +782,7 @@ export default function TastingApp() {
           
           {!image ? (
             <div onClick={triggerFileInput} className={`border-2 border-dashed ${theme.border} rounded-xl p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors group flex flex-col items-center justify-center h-48 bg-gray-50/50`}>
-              <CustomIcon name="Camera" className={`w-12 h-12 ${theme.text} opacity-50 mb-3`} />
+              <Icon name="Camera" className={`w-12 h-12 ${theme.text} opacity-50 mb-3`} />
               <p className={`font-medium ${theme.text}`}>라벨 사진 촬영</p>
               <p className="text-xs text-gray-400 mt-1">AI가 품종, 원재료 및 테마를 자동 감지합니다</p>
             </div>
@@ -775,7 +794,7 @@ export default function TastingApp() {
 
           {isAnalyzing && (
             <div className="mt-4 flex flex-col items-center justify-center p-4 bg-gray-50 text-gray-800 rounded-xl border">
-              <Loader2 className="w-6 h-6 animate-spin mb-2" />
+              <Icon name="Loader2" className="w-6 h-6 animate-spin mb-2" />
               <p className="text-sm font-medium">AI가 라벨 및 실물인증코드를 대조 해독 중입니다...</p>
             </div>
           )}
@@ -799,7 +818,7 @@ export default function TastingApp() {
               {shareToCommunity && (
                 <div className={`p-4 rounded-xl border animate-in slide-in-from-top-4 ${analysisResult.isCodeDetected ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-amber-50/70 border-amber-200 text-amber-950'}`}>
                   <div className="flex items-start gap-2.5">
-                    <CustomIcon name={analysisResult.isCodeDetected ? "ShieldCheck" : "Info"} className={`${analysisResult.isCodeDetected ? 'text-emerald-600' : 'text-amber-600'} w-5 h-5 shrink-0 mt-0.5`} />
+                    <Icon name={analysisResult.isCodeDetected ? "ShieldCheck" : "Info"} className={`${analysisResult.isCodeDetected ? 'text-emerald-600' : 'text-amber-600'} w-5 h-5 shrink-0 mt-0.5`} />
                     <div>
                       <h4 className="font-bold text-xs">
                         {analysisResult.isCodeDetected ? "✅ 실물 인증코드 매칭 성공!" : "⚠️ 실물 인증코드 인식 실패"}
@@ -807,7 +826,7 @@ export default function TastingApp() {
                       <p className="text-[11px] mt-1 leading-relaxed text-gray-700">
                         {analysisResult.isCodeDetected 
                           ? `사진 속에서 발급한 코드 [${verificationCode}]가 감지되었습니다. 라운지에 인증완료 마크와 함께 안전하게 등록됩니다!`
-                          : `코드 [${verificationCode}]를 사진에서 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 대기글 상태로 라운지에 공유됩니다.`
+                          : `코드 [${verificationCode}]를 사진에서 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.`
                         }
                       </p>
                     </div>
@@ -833,7 +852,7 @@ export default function TastingApp() {
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
-                <CustomIcon name="Award" className="w-5 h-5 text-indigo-600"/>보틀 라운지에 실물 인증하여 공유하기
+                <Icon name="Award" className="w-5 h-5 text-indigo-600"/>보틀 라운지에 실물 인증하여 공유하기
               </h3>
               <input 
                 type="checkbox" 
@@ -854,6 +873,7 @@ export default function TastingApp() {
           </div>
         )}
 
+        {}
         <div className={`transition-all duration-500 ${analysisResult ? 'opacity-100' : 'opacity-50 pointer-events-none hidden'}`}>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center">
@@ -872,7 +892,7 @@ export default function TastingApp() {
                 <div key={cat.category} className="border border-gray-100 rounded-xl overflow-hidden">
                   <button onClick={() => setExpandedAromaCategory(p => p === cat.category ? null : cat.category)} className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
                     <span className="font-medium text-gray-700 text-sm">{cat.category}</span>
-                    {expandedAromaCategory === cat.category ? <CustomIcon name="ChevronUp" className="w-4 h-4 text-gray-500" /> : <CustomIcon name="ChevronDown" className="w-4 h-4 text-gray-500" />}
+                    {expandedAromaCategory === cat.category ? <Icon name="ChevronUp" className="w-4 h-4 text-gray-500" /> : <Icon name="ChevronDown" className="w-4 h-4 text-gray-500" />}
                   </button>
                   {expandedAromaCategory === cat.category && (
                     <div className="p-3 bg-white flex flex-wrap gap-1.5 border-t border-gray-100">
@@ -883,7 +903,7 @@ export default function TastingApp() {
                             key={aroma} onClick={() => setSelectedAromas(p => isSelected ? p.filter(a => a !== aroma) : [...p, aroma])}
                             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${isSelected ? 'bg-emerald-50 text-emerald-800 border border-emerald-300' : 'bg-white text-gray-600 border border-gray-200 hover:bg-emerald-50'}`}
                           >
-                            {isSelected && <Check size={12} className="inline mr-1" />} {aroma}
+                            {isSelected && <Icon name="Check" className="w-3 h-3 inline mr-1" />} {aroma}
                           </button>
                         );
                       })}
@@ -903,7 +923,7 @@ export default function TastingApp() {
               <div className="flex space-x-2">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button key={star} onClick={() => setOverallRating(star)} className="p-1 transition-transform hover:scale-110">
-                    <CustomIcon name="Star" className={`w-9 h-9 ${star <= overallRating ? 'fill-current text-yellow-400 drop-shadow-sm' : 'text-gray-300'}`} />
+                    <Icon name="Star" className={`w-9 h-9 ${star <= overallRating ? 'fill-current text-yellow-400 drop-shadow-sm' : 'text-gray-300'}`} />
                   </button>
                 ))}
               </div>
@@ -919,7 +939,7 @@ export default function TastingApp() {
             className={`w-full font-bold py-4 rounded-xl shadow-md transition-all flex items-center justify-center ${
               isSaving || !overallRating ? 'bg-gray-300 text-gray-400 cursor-not-allowed' : 'bg-gray-900 hover:bg-black text-white active:scale-95'
             }`}>
-            {isSaving ? <Loader2 className="animate-spin w-5 h-5 mr-2" /> : null}
+            {isSaving ? <Icon name="Loader2" className="animate-spin w-5 h-5 mr-2" /> : null}
             노트 저장하기
           </button>
         </div>
@@ -929,7 +949,7 @@ export default function TastingApp() {
 
   const renderInsightsView = () => (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center animate-in fade-in">
-       <CustomIcon name="BarChart3" className="w-12 h-12 text-indigo-300 mx-auto mb-3" />
+       <Icon name="BarChart3" className="w-12 h-12 text-indigo-300 mx-auto mb-3" />
        <h2 className="text-xl font-bold mb-2">나의 취향 분석</h2>
        <p className="text-gray-500 text-sm">지금까지 {notes.length}병을 기록하셨습니다!<br/>데이터가 더 쌓이면 선호하는 품종 및 캐스크 선호도를 알려드릴게요.</p>
     </div>
@@ -948,7 +968,7 @@ export default function TastingApp() {
              <div className="flex-1 min-w-0">
                 <div className={`text-[10px] px-2 py-0.5 rounded inline-block font-bold mb-1 uppercase ${theme.bg} ${theme.text}`}>{note.analysisResult?.type}</div>
                 <h3 className="font-bold text-sm text-gray-900 truncate">{note.analysisResult?.name}</h3>
-                <div className="flex items-center text-yellow-500 text-xs mt-1.5 font-bold"><CustomIcon name="Star" className="w-3.5 h-3.5 fill-current text-yellow-500 mr-1"/> {note.overallRating}점</div>
+                <div className="flex items-center text-yellow-500 text-xs mt-1.5 font-bold"><Icon name="Star" className="w-3.5 h-3.5 fill-current text-yellow-500 mr-1"/> {note.overallRating}점</div>
              </div>
            </div>
          );
@@ -964,7 +984,7 @@ export default function TastingApp() {
     return (
       <div className="space-y-6 animate-in fade-in">
         <div className="bg-gradient-to-r from-gray-900 to-black rounded-2xl p-6 text-white shadow-md">
-          <h2 className="text-xl font-bold flex items-center mb-2"><CustomIcon name="Users" className="w-6 h-6 mr-2 text-gray-300" /> 보틀 라운지</h2>
+          <h2 className="text-xl font-bold flex items-center mb-2"><Icon name="Users" className="w-6 h-6 mr-2 text-gray-300" /> 보틀 라운지</h2>
           <div className="bg-white/10 rounded-lg px-3 py-2 text-sm font-medium border border-white/20 inline-block">
               내 칭호: <span className="text-yellow-400 font-bold">{userStats[user?.uid]?.badge || '🥚 알콜 입문자'}</span>
           </div>
@@ -972,9 +992,9 @@ export default function TastingApp() {
 
         <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-gray-100">
            <div className="flex gap-2 overflow-x-auto hide-scrollbar snap-x flex-1">
-             <button onClick={() => setCommunityFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold snap-start ${communityFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>전체</button>
+             <button onClick={() => setCommunityFilter('all')} className={`snap-start px-4 py-1.5 rounded-full text-sm font-bold ${communityFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>전체</button>
              {Object.values(LIQUOR_CONFIG).map(l => (
-               <button key={l.id} onClick={() => setCommunityFilter(l.id)} className={`px-4 py-1.5 rounded-full text-sm font-bold snap-start whitespace-nowrap ${communityFilter === l.id ? `${getThemeClasses(l.theme).btnBg} text-white` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{l.icon} {l.name}</button>
+               <button key={l.id} onClick={() => setCommunityFilter(l.id)} className={`snap-start px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap ${communityFilter === l.id ? `${getThemeClasses(l.theme).btnBg} text-white` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{l.icon} {l.name}</button>
              ))}
            </div>
            <select onChange={(e) => setCommunitySort(e.target.value)} className="text-xs bg-gray-50 border border-gray-200 rounded p-1.5 ml-2 outline-none cursor-pointer">
@@ -988,7 +1008,7 @@ export default function TastingApp() {
           const myRating = post.ratings?.[user?.uid] || 0;
           const conf = LIQUOR_CONFIG[post.liquorType] || LIQUOR_CONFIG.wine;
 
-          // Check if current user has commented to lock their rating input
+          // Locks evaluation inputs upon posting comment to prevent abuses
           const hasCommented = post.comments?.some(c => c.userId === user?.uid);
           const isRatingLocked = myRating > 0 && hasCommented;
 
@@ -1010,7 +1030,7 @@ export default function TastingApp() {
                       
                       {myRating > 0 && (
                         <span className="bg-amber-50 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-200 flex items-center shrink-0 shadow-sm animate-in fade-in">
-                          <CustomIcon name="Star" className="w-3 h-3 fill-current text-amber-500 mr-1" />
+                          <Icon name="Star" className="w-3 h-3 fill-current text-amber-500 mr-1" />
                           내 평가: {myRating.toFixed(1)}점
                         </span>
                       )}
@@ -1020,17 +1040,17 @@ export default function TastingApp() {
                   <div className="shrink-0 ml-2">
                     {post.verificationStatus === 'ai_verified' && (
                       <span className="flex items-center bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-emerald-100">
-                        <Check className="w-3 h-3 mr-1" /> AI인증
+                        <Icon name="Check" className="w-3 h-3 mr-1" /> AI인증
                       </span>
                     )}
                     {post.verificationStatus === 'community_verified' && (
                       <span className="flex items-center bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-blue-100">
-                        <CustomIcon name="Users" className="w-3 h-3 mr-1" /> 집단인증
+                        <Icon name="Users" className="w-3 h-3 mr-1" /> 집단인증
                       </span>
                     )}
                     {post.verificationStatus === 'pending_vote' && (
                       <span className="flex items-center bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-amber-100 animate-pulse">
-                        <CustomIcon name="Search" className="w-3 h-3 mr-1" /> 인증투표중
+                        <Icon name="Search" className="w-3 h-3 mr-1" /> 인증투표중
                       </span>
                     )}
                   </div>
@@ -1056,16 +1076,15 @@ export default function TastingApp() {
                </div>
 
                {post.verificationStatus === 'pending_vote' && (
-                 <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl">
+                 <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left">
                    <div className="flex items-start gap-2.5">
-                     <CustomIcon name="Info" className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                     <Icon name="Info" className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                      <div className="flex-1">
                        <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 직접 수기로 마신 인증인가요?</h4>
                        <p className="text-[11px] text-amber-900 leading-relaxed mb-3">
                          AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요! (3명 이상 투표 및 동의율 50% 이상 시 실물인증 승격)
                        </p>
                        <div className="flex gap-2">
-                         {/* Force one-time non-reversible vote choice */}
                          <button 
                            onClick={() => handleVoteVerification(post.id, 'yes')}
                            disabled={post.votes?.voters?.[user?.uid] !== undefined}
@@ -1107,7 +1126,7 @@ export default function TastingApp() {
                         </div>
                       ) : (
                         <div className="flex flex-col items-center gap-2">
-                          <FractionalStarRating value={myRating} onChange={(score) => handleRatePost(post.id, post.ratings, score)} />
+                          <FractionalStarRating value={myRating} onSave={(score) => handleRatePost(post.id, post.ratings, score)} />
                           <span className="text-[9px] text-gray-400">댓글 작성 시 점수가 고정 및 저장됩니다!</span>
                         </div>
                       )}
@@ -1115,7 +1134,7 @@ export default function TastingApp() {
                    <div className="flex items-center gap-4">
                        <div className="text-center">
                          <span className="text-[10px] font-bold text-gray-400">총 부러움</span>
-                         <div className="text-lg font-black text-amber-600 flex items-center"><CustomIcon name="Award" className="w-4 h-4 mr-1"/>{(post.totalCommunityScore || 0).toFixed(1)}</div>
+                         <div className="text-lg font-black text-amber-600 flex items-center"><Icon name="Award" className="w-4 h-4 mr-1"/>{(post.totalCommunityScore || 0).toFixed(1)}</div>
                        </div>
                    </div>
                </div>
@@ -1145,7 +1164,7 @@ export default function TastingApp() {
                   </div>
                   <div className="flex gap-2">
                     <input type="text" value={commentInputs[post.id] || ''} onChange={e => setCommentInputs(p => ({...p, [post.id]: e.target.value}))} placeholder="댓글을 남기고 점수를 고정하세요!" className="flex-1 rounded-full border bg-white px-4 py-1.5 text-sm outline-none" />
-                    <button onClick={() => handleAddComment(post.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors"><CustomIcon name="Send" className="w-3 h-3 ml-0.5"/></button>
+                    <button onClick={() => handleAddComment(post.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors"><Icon name="Send" className="w-3 h-3 ml-0.5"/></button>
                   </div>
                </div>
             </div>
@@ -1160,7 +1179,7 @@ export default function TastingApp() {
       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="bg-gradient-to-r from-slate-900 to-indigo-900 rounded-2xl p-6 text-white shadow-md">
           <h2 className="text-xl font-bold flex items-center mb-2">
-            <CustomIcon name="Search" className="w-6 h-6 mr-2 text-blue-300" /> 보틀 백과 & 시세 검색
+            <Icon name="Search" className="w-6 h-6 mr-2 text-blue-300" /> 보틀 백과 & 시세 검색
           </h2>
           <p className="text-sm text-indigo-100 opacity-90 leading-relaxed">
             궁금한 보틀 이름을 검색해보세요.<br/>AI가 최신 웹 검색을 통해 역사, 테이스팅 노트, 그리고 최근 시세(성지 가격)를 간략히 요약해 드립니다.
@@ -1181,7 +1200,7 @@ export default function TastingApp() {
             disabled={isSearching || !searchQuery.trim()}
             className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition-colors disabled:opacity-50"
           >
-            {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <CustomIcon name="Search" className="w-5 h-5" />}
+            {isSearching ? <Icon name="Loader2" className="w-5 h-5 animate-spin" /> : <Icon name="Search" className="w-5 h-5" />}
           </button>
         </div>
 
@@ -1194,23 +1213,23 @@ export default function TastingApp() {
             
             <div className="p-5 space-y-5">
               <div>
-                <h4 className="flex items-center text-sm font-bold text-gray-800 mb-1.5"><CustomIcon name="BookOpen" className="w-4 h-4 mr-1.5 text-gray-500" /> 역사 및 특징</h4>
+                <h4 className="flex items-center text-sm font-bold text-gray-800 mb-1.5"><Icon name="BookOpen" className="w-4 h-4 mr-1.5 text-gray-500" /> 역사 및 특징</h4>
                 <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-xl">{searchResult.summary}</p>
               </div>
               
               <div>
-                <h4 className="flex items-center text-sm font-bold text-gray-800 mb-1.5"><CustomIcon name="Wine" className="w-4 h-4 mr-1.5 text-rose-500" /> 테이스팅 노트</h4>
+                <h4 className="flex items-center text-sm font-bold text-gray-800 mb-1.5"><Icon name="Wine" className="w-4 h-4 mr-1.5 text-rose-500" /> 테이스팅 노트</h4>
                 <p className="text-sm text-gray-600 leading-relaxed bg-rose-50/50 p-3 rounded-xl border border-rose-100">{searchResult.tasting}</p>
               </div>
 
               <div className="grid gap-3 pt-2">
                 <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
-                  <h4 className="flex items-center text-xs font-bold text-blue-800 mb-1"><CustomIcon name="DollarSign" className="w-4 h-4 mr-1" /> 시중 평균 시세</h4>
+                  <h4 className="flex items-center text-xs font-bold text-blue-800 mb-1"><Icon name="DollarSign" className="w-4 h-4 mr-1" /> 시중 평균 시세</h4>
                   <p className="text-sm font-medium text-gray-800">{searchResult.avgPrice}</p>
                 </div>
                 
                 <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
-                  <h4 className="flex items-center text-xs font-bold text-amber-800 mb-1"><CustomIcon name="MapPin" className="w-4 h-4 mr-1" /> 최근 성지/할인 정보</h4>
+                  <h4 className="flex items-center text-xs font-bold text-amber-800 mb-1"><Icon name="MapPin" className="w-4 h-4 mr-1" /> 최근 성지/할인 정보</h4>
                   <p className="text-sm font-medium text-gray-800">{searchResult.bargainInfo}</p>
                 </div>
               </div>
@@ -1230,27 +1249,27 @@ export default function TastingApp() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center">
-            <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 hover:text-black transition-colors"><CustomIcon name="Menu" className="w-6 h-6" /></button>
+            <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 hover:text-black transition-colors"><Icon name="Menu" className="w-6 h-6" /></button>
             <h1 className="text-lg font-black ml-2 tracking-tight">TastingNote</h1>
           </div>
-          <button onClick={() => navigateTo('add')} className="text-sm font-bold bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full flex items-center transition-colors"><CustomIcon name="PlusCircle" className="w-4 h-4 mr-1" /> 새 리뷰</button>
+          <button onClick={() => navigateTo('add')} className="text-sm font-bold bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full flex items-center transition-colors"><Icon name="PlusCircle" className="w-4 h-4 mr-1" /> 새 리뷰</button>
         </div>
       </header>
 
-      {/* 메뉴 사이드바 */}
+      {/* Drawer menu panels */}
       <div className={`fixed inset-0 bg-black/50 z-40 transition-opacity ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsMenuOpen(false)}>
         <div className={`absolute top-0 left-0 w-64 h-full bg-white shadow-2xl transition-transform ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`} onClick={e => e.stopPropagation()}>
           <div className="p-5 border-b bg-gray-50 flex justify-between items-center">
             <h2 className="font-black text-lg">메뉴</h2>
-            <button onClick={() => setIsMenuOpen(false)}><CustomIcon name="X" className="w-5 h-5 text-gray-500" /></button>
+            <button onClick={() => setIsMenuOpen(false)}><Icon name="X" className="w-5 h-5 text-gray-500" /></button>
           </div>
           <nav className="p-3 space-y-1">
-            <button onClick={() => navigateTo('add')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'add' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><CustomIcon name="PlusCircle" className="w-5 h-5 mr-3" /> 새 노트 작성</button>
-            <button onClick={() => navigateTo('list')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'list' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><ListIcon className="w-5 h-5 mr-3" /> 내 테이스팅 노트</button>
-            <button onClick={() => navigateTo('insights')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'insights' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><BarChart3 className="w-5 h-5 mr-3" /> 나의 취향 분석</button>
+            <button onClick={() => navigateTo('add')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'add' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="PlusCircle" className="w-5 h-5 mr-3" /> 새 노트 작성</button>
+            <button onClick={() => navigateTo('list')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'list' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="List" className="w-5 h-5 mr-3" /> 내 테이스팅 노트</button>
+            <button onClick={() => navigateTo('insights')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'insights' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="BarChart3" className="w-5 h-5 mr-3" /> 나의 취향 분석</button>
             <div className="my-2 border-t border-gray-100"></div>
-            <button onClick={() => navigateTo('search')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'search' ? 'bg-blue-600 text-white shadow-md' : 'text-blue-600 hover:bg-blue-50'}`}><CustomIcon name="Search" className="w-5 h-5 mr-3" /> 보틀 백과 & 시세 검색</button>
-            <button onClick={() => navigateTo('community')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium mt-1 ${currentView === 'community' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-600 hover:bg-indigo-50'}`}><CustomIcon name="Users" className="w-5 h-5 mr-3" /> 보틀 라운지</button>
+            <button onClick={() => navigateTo('search')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'search' ? 'bg-blue-600 text-white shadow-md' : 'text-blue-600 hover:bg-blue-50'}`}><Icon name="Search" className="w-5 h-5 mr-3" /> 보틀 백과 & 시세 검색</button>
+            <button onClick={() => navigateTo('community')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium mt-1 ${currentView === 'community' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-600 hover:bg-indigo-50'}`}><Icon name="Users" className="w-5 h-5 mr-3" /> 보틀 라운지</button>
           </nav>
         </div>
       </div>
@@ -1263,17 +1282,17 @@ export default function TastingApp() {
         {currentView === 'community' && renderCommunityView()}
       </main>
 
-      {/* 이미지 전체화면 모달 (실물 도용 검증 확인용) */}
+      {/* Image modals */}
       {selectedImage && (
         <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedImage(null)}>
           <button onClick={() => setSelectedImage(null)} className="absolute top-4 right-4 p-2 text-white/70 hover:text-white bg-black/50 rounded-full backdrop-blur-sm transition-colors">
-            <CustomIcon name="X" className="w-6 h-6" />
+            <Icon name="X" className="w-6 h-6" />
           </button>
           <div className="max-w-full max-h-[80vh] relative" onClick={e => e.stopPropagation()}>
             <img src={selectedImage} alt="Enlarged verification" className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl border border-white/10" />
           </div>
           <div className="mt-6 text-center text-white/90 text-sm bg-black/60 px-5 py-2.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg flex items-center">
-            <CustomIcon name="ShieldCheck" className="w-5 h-5 mr-2 text-blue-400 animate-pulse" />
+            <Icon name="ShieldCheck" className="w-5 h-5 mr-2 text-blue-400 animate-pulse" />
             사진 속의 자필 인증코드를 눈으로 대조하여 도용을 직접 판정하세요!
           </div>
         </div>
