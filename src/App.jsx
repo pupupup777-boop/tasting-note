@@ -94,7 +94,23 @@ const getThemeClasses = (theme) => {
   };
   return map[theme] || map.rose;
 };
-
+const resizeImage = (base64Str, maxWidth = 400) => {
+  return new Promise((resolve) => {
+    let img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      let canvas = document.createElement('canvas');
+      let ratio = maxWidth / img.width;
+      if (ratio > 1) ratio = 1;
+      canvas.width = img.width * ratio;
+      canvas.height = img.height * ratio;
+      let ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // 화질을 50%(0.5) 수준으로 압축하여 용량을 50KB 이하로 싹 줄입니다.
+      resolve(canvas.toDataURL('image/jpeg', 0.5));
+    };
+  });
+};
 const FractionalStarRating = ({ value, onChange, onSave }) => {
   const [hoverValue, setHoverValue] = useState(null);
   const containerRef = useRef(null);
