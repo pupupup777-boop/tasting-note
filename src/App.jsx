@@ -109,6 +109,24 @@ const getGeminiApiKey = () => {
 const GEMINI_API_KEY = getGeminiApiKey();
 const isApiKeyMissing = !GEMINI_API_KEY || GEMINI_API_KEY.trim() === "";
 
+// 🚀 스마트폰 업로드 먹통 방지를 위한 초경량 압축기 완벽 복구
+const resizeImage = (base64Str, maxWidth = 400) => {
+  return new Promise((resolve) => {
+    let img = new Image();
+    img.onload = () => {
+      let canvas = document.createElement('canvas');
+      let ratio = maxWidth / img.width;
+      if (ratio > 1) ratio = 1;
+      canvas.width = img.width * ratio;
+      canvas.height = img.height * ratio;
+      let ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.5));
+    };
+    img.src = base64Str;
+  });
+};
+
 const FractionalStarRating = ({ value, onSave }) => {
   const [hoverValue, setHoverValue] = useState(null);
   const [localValue, setLocalValue] = useState(value || 3.0);
@@ -407,6 +425,7 @@ export default function TastingApp() {
 
   const triggerFileInput = () => fileInputRef.current?.click();
 
+  // 🚀 원본 리사이징 로직과 흐름 완벽 복구
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -921,14 +940,6 @@ export default function TastingApp() {
            </div>
          );
        })}
-    </div>
-  );
-
-  const renderInsightsView = () => (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center animate-in fade-in">
-       <BarChart3 className="w-12 h-12 text-indigo-300 mx-auto mb-3" />
-       <h2 className="text-xl font-bold mb-2">나의 취향 분석</h2>
-       <p className="text-gray-500 text-sm">지금까지 {notes.length}병을 기록하셨습니다!<br/>데이터가 더 쌓이면 선호하는 품종 및 캐스크 선호도를 알려드릴게요.</p>
     </div>
   );
 
