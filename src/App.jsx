@@ -440,7 +440,9 @@ export default function TastingApp() {
       setImage(null); setAnalysisResult(null); setPersonalNotes(''); setOverallRating(0); setShareToCommunity(false);
       setCurrentView('list');
     } catch (err) {
-      showToast("저장 중 오류가 발생했습니다.", "error");
+      // 🚀 [범인 검거] 저장 중 에러가 나면 폰 화면에 정확히 이유를 띄웁니다!
+      alert("데이터베이스 저장 실패 상세 이유: " + err.message);
+      console.error("저장 상세 에러:", err);
     }
   };
 
