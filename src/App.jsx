@@ -428,46 +428,70 @@ export default function TastingApp() {
     setIsSearching(true);
     setSearchResult(null);
     
-    try {
-      const payload = {
-        contents: [{ 
-          role: "user", 
-          parts: [{ text: `"${searchQuery}"에 대한 간략한 역사와 특징, 테이스팅 노트(향과 맛), 그리고 한국의 대표 주류 시세 비교 서비스(데일리샷 등)나 최근 실거래 커뮤니티 시세 가격 정보(날짜/구매처)를 최신 웹 검색 결과에 기반해 정제한 뒤 지정된 JSON 형태로 반환해줘.` }] 
-        }],
-        tools: [{ "google_search": {} }],
-        generationConfig: { 
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: "OBJECT",
-            properties: {
-              "name": { type: "STRING", description: "검색된 정확한 술 한글/영문 이름" },
-              "summary": { type: "STRING", description: "역사와 특징을 1~2줄로 압축한 요약 정보" },
-              "tasting": { type: "STRING", description: "아로마, 팔레트, 피니시 주요 특징" },
-              "avgPrice": { type: "STRING", description: "현재 형성된 평균적인 소매점/스마트오더 가격" },
-              "bargainInfo": { type: "STRING", description: "최근 할인 행사 성지 가격 정보 (예: 26년 2월 이마트 24만원)" }
-            },
-            required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
-          }
-        }
-      };
+    // 503 과부하 대응을 위한 자동 재시도 설정 (최대 3회, 시간차 대기)
+    const maxRetries = 3;
+    let delay = 1500; // 첫 번째 실패 시 1.5초 대기
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(payload) 
-      });
-      if (!response.ok) throw new Error(`API call failed: ${response.status}`);
-      const result = await response.json();
-      
-      if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-        setSearchResult(JSON.parse(result.candidates[0].content.parts[0].text));
-      } else {
-        showToast("검색 결과를 가져오지 못했습니다.", "error");
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const payload = {
+          contents: [{ 
+            role: "user", 
+            parts: [{ text: `"${searchQuery}"에 대한 간략한 역사와 특징, 테이스팅 노트(향과 맛), 그리고 한국의 대표 주류 시세 비교 서비스(데일리샷 등)나 최근 실거래 커뮤니티 시세 가격 정보(날짜/구매처)를 최신 웹 검색 결과에 기반해 정제한 뒤 지정된 JSON 형태로 반환해줘.` }] 
+          }],
+          tools: [{ "google_search": {} }],
+          generationConfig: { 
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                "name": { type: "STRING", description: "검색된 정확한 술 한글/영문 이름" },
+                "summary": { type: "STRING", description: "역사와 특징을 1~2줄로 압축한 요약 정보" },
+                "tasting": { type: "STRING", description: "아로마, 팔레트, 피니시 주요 특징" },
+                "avgPrice": { type: "STRING", description: "현재 형성된 평균적인 소매점/스마트오더 가격" },
+                "bargainInfo": { type: "STRING", description: "최근 할인 행사 성지 가격 정보 (예: 26년 2월 이마트 24만원)" }
+              },
+              required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
+            }
+          }
+        };
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify(payload) 
+        });
+
+        // 만약 구글 서버가 과부하(503)이고, 아직 재시도 횟수가 남았다면 시간차 재시도
+        if (response.status === 503 && i < maxRetries - 1) {
+          showToast(`⚠️ 구글 서버 혼잡으로 재시도 중입니다... (${i + 1}/${maxRetries}회)`, "info");
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // 대기 시간 2배 증가 (지수 백오프)
+          continue;
+        }
+
+        if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+        const result = await response.json();
+        
+        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+          setSearchResult(JSON.parse(result.candidates[0].content.parts[0].text));
+          break; // 성공 시 루프 탈출
+        } else {
+          throw new Error("Empty response parts");
+        }
+      } catch (err) {
+        // 마지막 시도마저 실패했을 때 최종 에러 핸들링
+        if (i === maxRetries - 1) {
+          showToast("서버 과부하로 검색이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+          console.error(err);
+        } else {
+          // 일반 네트워크 에러 시에도 시간차 대기 후 재시도
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
+      } finally {
+        if (i === maxRetries - 1) setIsSearching(false);
       }
-    } catch (err) {
-      showToast("검색 중 오류가 발생했습니다.", "error");
-    } finally {
-      setIsSearching(false);
     }
   };
 
@@ -529,48 +553,70 @@ export default function TastingApp() {
       }
     };
 
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(payload) 
-      });
-      if (!response.ok) throw new Error(`API call failed: ${response.status}`);
-      const result = await response.json();
-      
-      if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-        const parsed = JSON.parse(result.candidates[0].content.parts[0].text);
-        setAnalysisResult(parsed);
+    // 503 과부하 대응을 위한 자동 재시도 설정 (최대 3회, 시간차 대기)
+    const maxRetries = 3;
+    let delay = 1500;
 
-        if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
-          if (LIQUOR_CONFIG[parsed.detectedCategory]) {
-            setSelectedLiquorType(parsed.detectedCategory);
-            showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
-          }
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' }, 
+          body: JSON.stringify(payload) 
+        });
+
+        // 503 에러 발생 시 재시도 안내 및 지연 대기
+        if (response.status === 503 && i < maxRetries - 1) {
+          showToast(`⚠️ 구글 서버 과부하로 재시도 중입니다... (${i + 1}/${maxRetries}회)`, "info");
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          continue;
         }
 
-        const activeCategory = parsed.detectedCategory || selectedLiquorType;
-        const activeConfig = LIQUOR_CONFIG[activeCategory];
+        if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+        const result = await response.json();
         
-        const initialRatings = {};
-        activeConfig.criteria.forEach(c => initialRatings[c.id] = 0);
-        setRatings(initialRatings);
-        setExpandedAromaCategory(activeConfig.aromas[0].category);
+        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
+          const parsed = JSON.parse(result.candidates[0].content.parts[0].text);
+          setAnalysisResult(parsed);
 
-        if (shareToCommunity) {
-          if (parsed.isCodeDetected) {
-            showToast("실물 인증코드가 성공적으로 감지되었습니다! 즉시 정식인증 마크가 부여됩니다.", "success");
-          } else {
-            showToast("쪽지 코드를 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.", "info");
+          if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
+            if (LIQUOR_CONFIG[parsed.detectedCategory]) {
+              setSelectedLiquorType(parsed.detectedCategory);
+              showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
+            }
           }
+
+          const activeCategory = parsed.detectedCategory || selectedLiquorType;
+          const activeConfig = LIQUOR_CONFIG[activeCategory];
+          
+          const initialRatings = {};
+          activeConfig.criteria.forEach(c => initialRatings[c.id] = 0);
+          setRatings(initialRatings);
+          setExpandedAromaCategory(activeConfig.aromas[0].category);
+
+          if (shareToCommunity) {
+            if (parsed.isCodeDetected) {
+              showToast("실물 인증코드가 성공적으로 감지되었습니다! 즉시 정식인증 마크가 부여됩니다.", "success");
+            } else {
+              showToast("쪽지 코드를 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.", "info");
+            }
+          }
+          break; // 성공했으므로 재시도 루프 종료
+        } else {
+          throw new Error("Empty response parts");
         }
-      } else {
-        setError("AI가 이미지를 분석하지 못했습니다.");
+      } catch (err) {
+        if (i === maxRetries - 1) {
+          setError("구글 서버 과부하로 인해 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요.");
+          showToast("라벨 분석 실패: 서버 과부하", "error");
+        } else {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
+      } finally {
+        if (i === maxRetries - 1) setIsAnalyzing(false);
       }
-    } catch (err) {
-      setError("라벨 정밀 분석 오류: " + err.message);
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
