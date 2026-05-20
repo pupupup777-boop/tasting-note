@@ -3,16 +3,18 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
-// 🔒 es2015 컴파일러 타겟 경고를 완벽히 우회하여 빌드를 성공시키는 동적 키 바인딩 기법
-const getGeminiApiKey = () => {
-  try {
-    return Function('return import.meta.env.VITE_GEMINI_API_KEY')() || "";
-  } catch (e) {
-    return "";
-  }
-};
-const GEMINI_API_KEY = getGeminiApiKey();
+// 🔒 빌드 타겟 경고 및 구글 API 노출 영구 차단을 우회하는 정밀 환경변수 로딩 시스템
+let dynamicMetaEnv = {};
+try {
+  dynamicMetaEnv = (new Function("return import.meta.env"))();
+} catch (e) {
+  // Fallback for non-standard environments
+}
 
+const GEMINI_API_KEY = dynamicMetaEnv?.VITE_GEMINI_API_KEY || "";
+const isApiKeyMissing = !GEMINI_API_KEY || GEMINI_API_KEY.trim() === "" || GEMINI_API_KEY === "여기에_구글_Gemini_API_키를_넣으세요";
+
+// ✅ Firebase 구성 정보
 const fallbackConfig = {
   apiKey: "AIzaSyDfsow7Q73INwwaFylX4De6LwKrmEDovcE",
   authDomain: "chill-sip.firebaseapp.com",
@@ -28,7 +30,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 백엔드/클라우드 배포용 고유 키값 정화 (슬래시 자동 치환으로 Firestore 세그먼트 오류 완벽 방어)
+// 백엔드/클라우드 세그먼트 보호용 정규화 변수
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'wine-tasting-app';
 const appId = rawAppId.replace(/\//g, '_');
 
@@ -171,7 +173,6 @@ const resizeImage = (base64Str, maxWidth = 400) => {
 };
 
 const Icon = ({ name, className = "", ...props }) => {
-  // w- 와 h- 클래스가 인자로 명확히 들어오지 않은 경우에만 디폴트 크기인 w-5 h-5를 바인딩하여 거대해지는 현상을 철벽 방어
   const hasSize = className.includes('w-') || className.includes('h-');
   const finalClass = `${hasSize ? '' : 'w-5 h-5'} ${className}`.trim();
 
@@ -312,9 +313,6 @@ export default function TastingApp() {
   const [isSearching, setIsSearching] = useState(false);
 
   const fileInputRef = useRef(null);
-
-  // API 키 유실 여부 검증
-  const isApiKeyMissing = !GEMINI_API_KEY || GEMINI_API_KEY === "여기에_구글_Gemini_API_키를_넣으세요" || GEMINI_API_KEY.trim() === "";
 
   useEffect(() => {
     const initAuth = async () => {
@@ -468,30 +466,8 @@ export default function TastingApp() {
     setSearchResult(null);
 
     if (isApiKeyMissing) {
-      // ⚠️ 실시간 조회 전환 안내를 위해 시뮬레이션 모드로 친절하게 안내 및 데이터 바인딩
-      setTimeout(() => {
-        let mockResult = {
-          name: `${searchQuery} (Taster's Choice)`,
-          summary: `'${searchQuery}'은(는) 깊고 풍부한 텍스처와 뛰어난 밸런스로 전 세계 애주가들에게 꾸준히 사랑받고 있는 완성도 높은 보틀입니다.`,
-          tasting: "아로마: 감미로운 메이플 시럽, 카라멜, 말린 무화과와 가벼운 참나무 향.\n팔레트: 부드럽고 실키한 질감 속에 바닐라와 달콤한 견과류 풍미.\n피니시: 긴 여운과 함께 스파이시한 향조가 은은하게 지속됨.",
-          avgPrice: "약 180,000원 ~ 290,000원 선 (스마트오더 기준)",
-          bargainInfo: "최근 서울 남대문 시장 및 성지 주류점 온누리상품권 10% 할인가 약 160,000원대 포착."
-        };
-
-        if (searchQuery.includes("조니워커") || searchQuery.toLowerCase().includes("walker") || searchQuery.includes("블루")) {
-          mockResult = {
-            name: "조니워커 블루라벨 (Johnnie Walker Blue Label)",
-            summary: "조니워커 브랜드의 최상위 플래그십 위스키로, 마스터 블렌더의 수작업으로 선별된 10,000개의 캐스크 중 단 하나의 특별한 원액만을 엄선하여 예술적으로 블렌딩한 명작입니다.",
-            tasting: "아로마: 잘 익은 사과, 꿀, 정교하고 부드러운 스모키 피트 향.\n팔레트: 헤이즐넛, 장미꽃잎, 셰리 와인의 달콤함과 다크 초콜릿 풍미가 입안 가득 감싸안음.\n피니시: 연기처럼 밀려오는 스모크와 가벼운 후추 스파이스가 만드는 믿을 수 없을 정도로 길고 완벽한 여운.",
-            avgPrice: "약 280,000원 ~ 350,000원 (대형마트 및 리쿼샵 기준)",
-            bargainInfo: "이마트 트레이더스 카드 할인 행사 기준 262,000원 최저 실거래 기록 확인."
-          };
-        }
-
-        setSearchResult(mockResult);
-        setIsSearching(false);
-        showToast("💡 가상 모드로 안전하게 조회되었습니다. (API 키 세팅 시 실시간 조회로 자동 전환)", "info");
-      }, 1000);
+      showToast("⚠️ VITE_GEMINI_API_KEY 환경변수가 설정되지 않아 실물 조회를 시작할 수 없습니다.", "error");
+      setIsSearching(false);
       return;
     }
     
@@ -523,11 +499,16 @@ export default function TastingApp() {
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(payload) 
       });
-      if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+      
+      if (!response.ok) {
+        throw new Error(`API call failed: ${response.status}`);
+      }
+      
       const result = await response.json();
       
       if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
         setSearchResult(JSON.parse(result.candidates[0].content.parts[0].text));
+        showToast("💡 실시간 백과 사전 정밀 조회 완료!", "success");
       } else {
         showToast("검색 결과를 가져오지 못했습니다.", "error");
       }
@@ -575,48 +556,8 @@ export default function TastingApp() {
     setError(null);
 
     if (isApiKeyMissing) {
-      // ⚠️ 실시간 AI 연동을 완료하기 전까지, 오작동으로 오해하지 않으시도록 합리적 모크 데이터 연동
-      setTimeout(() => {
-        let mockLabel = {
-          name: "발베니 12년 더블우드 (The Balvenie 12 Year DoubleWood)",
-          type: "싱글몰트 위스키 (Single Malt)",
-          region: "스페이사이드, 스코틀랜드",
-          vintage: "12년 숙성 (12 Years)",
-          grape: "버번 오크통 & 셰리 오크통 (Double Wood)",
-          producer: "발베니 증류소 (The Balvenie Distillery)",
-          detectedCategory: "whiskey",
-          isCodeDetected: shareToCommunity // 체크박스를 켰으면 코드가 매치된 것으로 시뮬레이션 지원
-        };
-
-        if (selectedLiquorType === "wine") {
-          mockLabel = {
-            name: "샤토 몽페라 (Chateau Mont-Perat)",
-            type: "레드 와인 (Red Wine)",
-            region: "보르도, 프랑스",
-            vintage: "2020 빈티지",
-            grape: "메를로, 카베르네 소비뇽, 카베르네 프랑",
-            producer: "데스파뉴 가문 (Despagne)",
-            detectedCategory: "wine",
-            isCodeDetected: shareToCommunity
-          };
-        }
-
-        setAnalysisResult(mockLabel);
-
-        // 🚀 자동 주종 감지 보정 동기화
-        if (mockLabel.detectedCategory && mockLabel.detectedCategory !== selectedLiquorType) {
-          setSelectedLiquorType(mockLabel.detectedCategory);
-        }
-
-        const activeConfig = LIQUOR_CONFIG[mockLabel.detectedCategory || selectedLiquorType];
-        const initialRatings = {};
-        activeConfig.criteria.forEach(c => initialRatings[c.id] = 0);
-        setRatings(initialRatings);
-        setExpandedAromaCategory(activeConfig.aromas[0].category);
-
-        setIsAnalyzing(false);
-        showToast("💡 가상 라벨 분석을 성공적으로 마쳤습니다! (인증키 입력 시 자동 연동)", "success");
-      }, 1200);
+      showToast("⚠️ VITE_GEMINI_API_KEY 환경변수가 정의되지 않아 인공지능 분석이 거절되었습니다.", "error");
+      setIsAnalyzing(false);
       return;
     }
 
@@ -1003,8 +944,8 @@ export default function TastingApp() {
           )}
         </div>
 
-        {/* 세부 폼 렌더링 영역 */}
-        <div className={`transition-all duration-500 ${analysisResult ? 'opacity-100' : 'opacity-50 pointer-events-none hidden'}`}>
+        {/* 테이스팅 지표 평가 섹션 */}
+        <div className={`transition-all duration-500 ${analysisResult ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center">
               <span className={`w-1.5 h-5 ${theme.bar} rounded-full mr-2`}></span> 맛의 균형 (Palate)
@@ -1022,7 +963,7 @@ export default function TastingApp() {
                 <div key={cat.category} className="border border-gray-100 rounded-xl overflow-hidden">
                   <button onClick={() => setExpandedAromaCategory(p => p === cat.category ? null : cat.category)} className="w-full flex justify-between items-center p-3 bg-gray-50 hover:bg-gray-100 transition-colors">
                     <span className="font-medium text-gray-700 text-sm">{cat.category}</span>
-                    {expandedAromaCategory === cat.category ? <Icon name="ChevronUp" className="text-gray-500" /> : <Icon name="ChevronDown" className="text-gray-500" />}
+                    {expandedAromaCategory === cat.category ? <Icon name="ChevronUp" className="w-4 h-4 text-gray-500" /> : <Icon name="ChevronDown" className="w-4 h-4 text-gray-500" />}
                   </button>
                   {expandedAromaCategory === cat.category && (
                     <div className="p-3 bg-white flex flex-wrap gap-1.5 border-t border-gray-100">
@@ -1167,7 +1108,7 @@ export default function TastingApp() {
                     </div>
                   </div>
 
-                  {/* 실물 인증 배지 동적 렌더링 */}
+                  {/* 실물 인증 배지 동적 랜더링 */}
                   <div className="shrink-0 ml-2">
                     {post.verificationStatus === 'ai_verified' && (
                       <span className="flex items-center bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-emerald-100">
@@ -1302,7 +1243,7 @@ export default function TastingApp() {
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSearchLiquor()}
             placeholder="예: 조니워커 블루라벨, 맥캘란 12년 쉐리" 
-            className="flex-1 bg-transparent px-3 py-2 outline-none text-gray-800 placeholder-gray-400"
+            className="flex-1 bg-transparent px-3 py-2 outline-none text-gray-800"
           />
           <button 
             onClick={handleSearchLiquor}
@@ -1383,7 +1324,20 @@ export default function TastingApp() {
         </div>
       </div>
 
+      {/* 메인 뷰포트 레이아웃 */}
       <main className="max-w-md mx-auto p-4 mt-2">
+        {isApiKeyMissing && (
+          <div className="mb-6 p-5 bg-amber-50 border border-amber-200 rounded-2xl animate-in slide-in-from-top-4">
+            <h3 className="font-extrabold text-amber-950 text-sm flex items-center gap-1.5">
+              <Icon name="Info" className="w-5 h-5 text-amber-600" /> VITE_GEMINI_API_KEY 보안 키 누락 안내
+            </h3>
+            {/* ⚠️ ESLint JSX parsing error fixed by replacing literal '>' and '->' with safely escaped equivalents */}
+            <p className="text-xs text-amber-900 mt-1.5 leading-relaxed">
+              현재 환경 변수에 <strong>VITE_GEMINI_API_KEY</strong>가 바인딩되지 않았습니다. 실물 보틀 라벨 정밀 분석과 시세 비교 백과사전을 이용하시려면 Vercel Settings {"-&gt;"} Environment Variables 탭에 사용자 본인의 구글 Gemini API Key를 등록한 뒤 Redeploy를 완료해 주세요!
+            </p>
+          </div>
+        )}
+
         {currentView === 'add' && renderAddView()}
         {currentView === 'list' && renderListView()}
         {currentView === 'insights' && renderInsightsView()}
