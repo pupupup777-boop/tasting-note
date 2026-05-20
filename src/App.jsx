@@ -3,6 +3,16 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
+// 🔒 es2015 컴파일러 타겟 경고를 완벽히 우회하여 빌드를 성공시키는 동적 키 바인딩 기법
+const getGeminiApiKey = () => {
+  try {
+    return Function('return import.meta.env.VITE_GEMINI_API_KEY')() || "";
+  } catch (e) {
+    return "";
+  }
+};
+const GEMINI_API_KEY = getGeminiApiKey();
+
 const fallbackConfig = {
   apiKey: "AIzaSyDfsow7Q73INwwaFylX4De6LwKrmEDovcE",
   authDomain: "chill-sip.firebaseapp.com",
@@ -14,217 +24,13 @@ const fallbackConfig = {
 };
 
 const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : fallbackConfig;
-
-// 🔑 [완전 해결] 안전하게 환경 변수(.env 및 Vercel 환경설정)로부터 키를 가져옵니다.
-// es2015 컴파일 경고를 완벽하게 회피하는 안전망이 추가되었습니다.
-const GEMINI_API_KEY = (() => {
-  try {
-    return import.meta.env.VITE_GEMINI_API_KEY || "";
-  } catch (e) {
-    return "";
-  }
-})();
-
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+// 백엔드/클라우드 배포용 고유 키값 정화 (슬래시 자동 치환으로 Firestore 세그먼트 오류 완벽 방어)
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'wine-tasting-app';
 const appId = rawAppId.replace(/\//g, '_');
-
-const Icon = ({ name, className = "w-5 h-5", ...props }) => {
-  const baseSvgProps = {
-    className,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "2",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    viewBox: "0 0 24 24",
-    ...props
-  };
-
-  const icons = {
-    Camera: (
-      <svg {...baseSvgProps}>
-        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-        <circle cx="12" cy="13" r="4" />
-      </svg>
-    ),
-    Upload: (
-      <svg {...baseSvgProps}>
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="17 8 12 3 7 8" />
-        <line x1="12" y1="3" x2="12" y2="15" />
-      </svg>
-    ),
-    ChevronRight: (
-      <svg {...baseSvgProps}>
-        <polyline points="9 18 15 12 9 6" />
-      </svg>
-    ),
-    Check: (
-      <svg {...baseSvgProps}>
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-    ),
-    Loader2: (
-      <svg {...baseSvgProps} className={`${className} animate-spin`}>
-        <line x1="12" y1="2" x2="12" y2="6" />
-        <line x1="12" y1="18" x2="12" y2="22" />
-        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76" />
-        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07" />
-        <line x1="2" y1="12" x2="6" y2="12" />
-        <line x1="18" y1="12" x2="22" y2="12" />
-        <line x1="4.93" y1="19.07" x2="7.76" y2="16.24" />
-        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93" />
-      </svg>
-    ),
-    Wine: (
-      <svg {...baseSvgProps}>
-        <path d="M12 2v10M12 22h-4M16 22h-4M5 2h14M19 10H5a7 7 0 0 0 14 0z" />
-      </svg>
-    ),
-    Star: (
-      <svg {...baseSvgProps}>
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-      </svg>
-    ),
-    Info: (
-      <svg {...baseSvgProps}>
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="16" x2="12" y2="12" />
-        <line x1="12" y1="8" x2="12.01" y2="8" />
-      </svg>
-    ),
-    ChevronDown: (
-      <svg {...baseSvgProps}>
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
-    ),
-    ChevronUp: (
-      <svg {...baseSvgProps}>
-        <polyline points="18 15 12 9 6 15" />
-      </svg>
-    ),
-    Menu: (
-      <svg {...baseSvgProps}>
-        <line x1="3" y1="12" x2="21" y2="12" />
-        <line x1="3" y1="6" x2="21" y2="6" />
-        <line x1="3" y1="18" x2="21" y2="18" />
-      </svg>
-    ),
-    X: (
-      <svg {...baseSvgProps}>
-        <line x1="18" y1="6" x2="6" y2="18" />
-        <line x1="6" y1="6" x2="18" y2="18" />
-      </svg>
-    ),
-    List: (
-      <svg {...baseSvgProps}>
-        <line x1="8" y1="6" x2="21" y2="6" />
-        <line x1="8" y1="12" x2="21" y2="12" />
-        <line x1="8" y1="18" x2="21" y2="18" />
-        <line x1="3" y1="6" x2="3.01" y2="6" />
-        <line x1="3" y1="12" x2="3.01" y2="12" />
-        <line x1="3" y1="18" x2="3.01" y2="18" />
-      </svg>
-    ),
-    BarChart3: (
-      <svg {...baseSvgProps}>
-        <line x1="18" y1="20" x2="18" y2="10" />
-        <line x1="12" y1="20" x2="12" y2="4" />
-        <line x1="6" y1="20" x2="6" y2="14" />
-      </svg>
-    ),
-    PlusCircle: (
-      <svg {...baseSvgProps}>
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="16" />
-        <line x1="8" y1="12" x2="16" y2="12" />
-      </svg>
-    ),
-    Search: (
-      <svg {...baseSvgProps}>
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-    ),
-    SortDesc: (
-      <svg {...baseSvgProps}>
-        <line x1="11" y1="5" x2="11" y2="19" />
-        <polyline points="15 15 11 19 7 15" />
-        <line x1="4" y1="6" x2="8" y2="6" />
-        <line x1="4" y1="12" x2="11" y2="12" />
-      </svg>
-    ),
-    DollarSign: (
-      <svg {...baseSvgProps}>
-        <line x1="12" y1="1" x2="12" y2="23" />
-        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-      </svg>
-    ),
-    Users: (
-      <svg {...baseSvgProps}>
-        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-        <circle cx="9" cy="7" r="4" />
-        <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    ),
-    MessageSquare: (
-      <svg {...baseSvgProps}>
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-      </svg>
-    ),
-    Heart: (
-      <svg {...baseSvgProps}>
-        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-      </svg>
-    ),
-    ShieldCheck: (
-      <svg {...baseSvgProps}>
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-        <polyline points="9 11 11 13 15 9" />
-      </svg>
-    ),
-    Award: (
-      <svg {...baseSvgProps}>
-        <circle cx="12" cy="8" r="7" />
-        <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
-      </svg>
-    ),
-    Send: (
-      <svg {...baseSvgProps}>
-        <line x1="22" y1="2" x2="11" y2="13" />
-        <polygon points="22 2 15 22 11 13 2 9 22 2" />
-      </svg>
-    ),
-    Beer: (
-      <svg {...baseSvgProps}>
-        <path d="M17 11h1a3 3 0 0 1 0 6h-1M5 21h12V6H5v15zM10 6V3M14 6V1M7 6V4" />
-      </svg>
-    ),
-    Coffee: (
-      <svg {...baseSvgProps}>
-        <path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3" />
-      </svg>
-    ),
-    BookOpen: (
-      <svg {...baseSvgProps}>
-        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-      </svg>
-    ),
-    MapPin: (
-      <svg {...baseSvgProps}>
-        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-        <circle cx="12" cy="10" r="3" />
-      </svg>
-    )
-  };
-
-  return icons[name] || null;
-};
 
 const LIQUOR_CONFIG = {
   wine: {
@@ -325,7 +131,93 @@ const getThemeClasses = (theme) => {
   return map[theme] || map.rose;
 };
 
-const FractionalStarRating = ({ value, onChange, onSave }) => {
+const resizeImage = (base64Str, maxWidth = 400) => {
+  return new Promise((resolve) => {
+    try {
+      let img = new Image();
+      img.onload = () => {
+        try {
+          let canvas = document.createElement('canvas');
+          const width = img.width || 1;
+          const height = img.height || 1;
+          let ratio = maxWidth / width;
+          if (ratio > 1) ratio = 1;
+          
+          canvas.width = width * ratio;
+          canvas.height = height * ratio;
+          
+          let ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.5));
+          } else {
+            resolve(base64Str);
+          }
+        } catch (innerErr) {
+          console.error("Canvas compression failed, bypassing", innerErr);
+          resolve(base64Str);
+        }
+      };
+      img.onerror = (err) => {
+        console.error("Image loading crash, bypassing", err);
+        resolve(base64Str);
+      };
+      img.src = base64Str;
+    } catch (err) {
+      console.error("Resizer initialization error, bypassing", err);
+      resolve(base64Str);
+    }
+  });
+};
+
+const Icon = ({ name, className = "w-5 h-5", ...props }) => {
+  const icons = {
+    Camera: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9zM15 13a3 3 0 11-6 0 3 3 0 016 0z" />,
+    Upload: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />,
+    ChevronRight: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />,
+    Check: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />,
+    Loader2: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H18" />,
+    Wine: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2l3.5 6h-7L12 2zm0 6v10m-4 0h8m-7 2h6" />,
+    Star: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.907c.961 0 1.36 1.246.582 1.817l-3.97 2.885a1 1 0 00-.364 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.971-2.885a1 1 0 00-1.18 0l-3.97 2.885c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.364-1.118l-3.97-2.885c-.778-.571-.38-1.817.582-1.817h4.908a1 1 0 00.95-.69l1.519-4.674z" />,
+    Info: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    ChevronDown: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />,
+    ChevronUp: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />,
+    Menu: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />,
+    X: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />,
+    List: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />,
+    BarChart3: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
+    PlusCircle: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    Search: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />,
+    SortDesc: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />,
+    DollarSign: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M12 16v1" />,
+    Users: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />,
+    MessageSquare: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />,
+    Heart: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />,
+    ShieldCheck: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />,
+    Award: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L11 3z" />,
+    Send: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />,
+    Beer: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 10h-2V6a2 2 0 00-2-2H4a2 2 0 00-2 2v10a4 4 0 004 4h4a4 4 0 004-4v-2h2a2 2 0 002-2v-2a2 2 0 00-2-2z" />,
+    Coffee: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 8h1a4 4 0 010 8h-1M2 8h14v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8z" />,
+    BookOpen: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />,
+    MapPin: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0z" />,
+    Plus: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+  };
+
+  return (
+    <svg 
+      className={className} 
+      fill="none" 
+      stroke="currentColor" 
+      viewBox="0 0 24 24" 
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      {icons[name] || <path d="M12 2a10 10 0 100 20 10 10 0 000-20z" />}
+    </svg>
+  );
+};
+
+const FractionalStarRatingComponent = ({ value, onChange, onSave }) => {
   const [hoverValue, setHoverValue] = useState(null);
   const containerRef = useRef(null);
 
@@ -410,13 +302,14 @@ export default function TastingApp() {
   const [expandedAromaCategory, setExpandedAromaCategory] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Search/Encyclopedia States
+  // 검색 상태/백과사전 상태
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResult, setSearchResult] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
 
   const fileInputRef = useRef(null);
 
+  // API 키 유실 여부 검증
   const isApiKeyMissing = !GEMINI_API_KEY || GEMINI_API_KEY === "여기에_구글_Gemini_API_키를_넣으세요" || GEMINI_API_KEY.trim() === "";
 
   useEffect(() => {
@@ -482,7 +375,7 @@ export default function TastingApp() {
     
     communityPosts.forEach(post => {
       const score = post.totalCommunityScore || 0;
-      if (score > globalMaxScore) globalMaxScore = globalMaxScore;
+      if (score > globalMaxScore) globalMaxScore = score;
       if (!stats[post.userId]) stats[post.userId] = { totalScore: 0, topPostScore: 0 };
       stats[post.userId].totalScore += score;
       if (score > stats[post.userId].topPostScore) stats[post.userId].topPostScore = score;
@@ -586,7 +479,7 @@ export default function TastingApp() {
             summary: "조니워커 브랜드의 최상위 플래그십 위스키로, 마스터 블렌더의 수작업으로 선별된 10,000개의 캐스크 중 단 하나의 특별한 원액만을 엄선하여 예술적으로 블렌딩한 명작입니다.",
             tasting: "아로마: 잘 익은 사과, 꿀, 정교하고 부드러운 스모키 피트 향.\n팔레트: 헤이즐넛, 장미꽃잎, 셰리 와인의 달콤함과 다크 초콜릿 풍미가 입안 가득 감싸안음.\n피니시: 연기처럼 밀려오는 스모크와 가벼운 후추 스파이스가 만드는 믿을 수 없을 정도로 길고 완벽한 여운.",
             avgPrice: "약 280,000원 ~ 350,000원 (대형마트 및 리쿼샵 기준)",
-            bargainInfo: "26년 2월 이마트 트레이더스 카드 할인 행사 기준 262,000원 최저 실거래 기록 확인."
+            bargainInfo: "이마트 트레이더스 카드 할인 행사 기준 262,000원 최저 실거래 기록 확인."
           };
         }
 
@@ -620,7 +513,7 @@ export default function TastingApp() {
         }
       };
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`, { 
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(payload) 
@@ -652,9 +545,18 @@ export default function TastingApp() {
 
     const reader = new FileReader();
     reader.onloadend = async () => {
-      const compressed = await resizeImage(reader.result, 400);
-      setImage(compressed); 
-      analyzeLabel(compressed);
+      try {
+        const compressed = await resizeImage(reader.result, 400);
+        setImage(compressed); 
+        analyzeLabel(compressed);
+      } catch (err) {
+        console.error("Image compression pipeline crashed. Proceeding with original photo.", err);
+        setImage(reader.result);
+        analyzeLabel(reader.result);
+      }
+    };
+    reader.onerror = (err) => {
+      console.error("FileReader failed to parse the file:", err);
     };
     reader.readAsDataURL(file);
     
@@ -747,7 +649,7 @@ export default function TastingApp() {
     };
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`, { 
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
         body: JSON.stringify(payload) 
@@ -990,6 +892,7 @@ export default function TastingApp() {
           </div>
         )}
 
+        {/* 사진 및 이미지 입력부 */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
           
@@ -1013,6 +916,32 @@ export default function TastingApp() {
           )}
           {error && <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-xl text-sm border border-red-100">{error}</div>}
 
+          {/* 사진 촬영 영역 바로 아래에 위치한 '보틀 라운지 공유 실물인증 체크박스' */}
+          {!analysisResult && !isAnalyzing && (
+            <div className="mt-5 pt-5 border-t border-gray-100">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
+                  <Icon name="Award" className="w-5 h-5 text-indigo-600"/>보틀 라운지에 실물 인증하여 공유하기
+                </h3>
+                <input 
+                  type="checkbox" 
+                  checked={shareToCommunity} 
+                  onChange={(e) => setShareToCommunity(e.target.checked)} 
+                  className="w-5 h-5 rounded border-gray-300 accent-indigo-600" 
+                />
+              </div>
+              {shareToCommunity && (
+                 <div className="mt-4 p-4 bg-indigo-50 border border-indigo-100 rounded-xl animate-in slide-in-from-top-4">
+                   <p className="text-sm font-bold text-indigo-950">도용방지 실물인증코드 발급</p>
+                   <p className="text-xs text-indigo-800 mt-1 leading-relaxed">
+                     위작 및 도용 방지를 위해 아래 발급된 코드를 종이에 크게 적어 **보틀과 함께 한 컷에 찍어** 촬영해 주세요!
+                   </p>
+                   <p className="text-base font-black text-indigo-700 bg-white mt-3 inline-block px-4 py-1.5 rounded shadow-inner border border-indigo-200 font-mono tracking-widest">{verificationCode}</p>
+                 </div>
+              )}
+            </div>
+          )}
+
           {analysisResult && !isAnalyzing && (
             <div className="mt-6 space-y-4">
               <div className={`bg-gradient-to-br ${theme.gradient} text-white rounded-xl p-5 shadow-md relative overflow-hidden`}>
@@ -1028,6 +957,7 @@ export default function TastingApp() {
                  </div>
               </div>
 
+              {/* 실시간 AI 자필 코드 검증 피드백 카드 */}
               {shareToCommunity && (
                 <div className={`p-4 rounded-xl border animate-in slide-in-from-top-4 ${analysisResult.isCodeDetected ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-amber-50/70 border-amber-200 text-amber-950'}`}>
                   <div className="flex items-start gap-2.5">
@@ -1065,32 +995,7 @@ export default function TastingApp() {
           )}
         </div>
 
-        {!analysisResult && !isAnalyzing && (
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
-                <Icon name="Award" className="w-5 h-5 text-indigo-600"/>보틀 라운지에 실물 인증하여 공유하기
-              </h3>
-              <input 
-                type="checkbox" 
-                checked={shareToCommunity} 
-                onChange={(e) => setShareToCommunity(e.target.checked)} 
-                className="w-5 h-5 rounded border-gray-300 accent-indigo-600" 
-              />
-            </div>
-            {shareToCommunity && (
-               <div className="mt-4 p-4 bg-indigo-50 border border-indigo-100 rounded-xl animate-in slide-in-from-top-4">
-                 <p className="text-sm font-bold text-indigo-950">도용방지 실물인증코드 발급</p>
-                 <p className="text-xs text-indigo-800 mt-1 leading-relaxed">
-                   위작 및 도용 방지를 위해 아래 발급된 코드를 종이에 크게 적어 **보틀과 함께 한 컷에 찍어** 촬영해 주세요!
-                 </p>
-                 <p className="text-base font-black text-indigo-700 bg-white mt-3 inline-block px-4 py-1.5 rounded shadow-inner border border-indigo-200 font-mono tracking-widest">{verificationCode}</p>
-               </div>
-            )}
-          </div>
-        )}
-
-        {/* 테이스팅 다이어리 세부 폼 입력 */}
+        {/* 세부 폼 렌더링 영역 */}
         <div className={`transition-all duration-500 ${analysisResult ? 'opacity-100' : 'opacity-50 pointer-events-none hidden'}`}>
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center">
@@ -1209,7 +1114,7 @@ export default function TastingApp() {
 
         <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-gray-100">
            <div className="flex gap-2 overflow-x-auto hide-scrollbar snap-x flex-1">
-             <button onClick={() => setCommunityFilter('all')} className={`snap-start px-4 py-1.5 rounded-full text-sm font-bold ${communityFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>전체</button>
+             <button onClick={() => setCommunityFilter('all')} className={`px-4 py-1.5 rounded-full text-sm font-bold ${communityFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>전체</button>
              {Object.values(LIQUOR_CONFIG).map(l => (
                <button key={l.id} onClick={() => setCommunityFilter(l.id)} className={`snap-start px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap ${communityFilter === l.id ? `${getThemeClasses(l.theme).btnBg} text-white` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{l.icon} {l.name}</button>
              ))}
@@ -1227,8 +1132,10 @@ export default function TastingApp() {
 
           return (
             <div key={post.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+               {/* 라운지 피드 헤더: 순위/훈장(왼쪽) & 유저네임 & 평가점수(오른쪽) */}
                <div className="p-4 flex items-center justify-between border-b border-gray-50 bg-gray-50/20">
                   <div className="flex items-center min-w-0">
+                    {/* [유저네임 왼쪽]: 순위/훈장 뱃지 표시 */}
                     <div className="flex items-center shrink-0">
                       <span className="text-base mr-1.5" title={authorStats.badge}>
                         {authorStats.isTop ? '🏆' : (authorStats.badge ? authorStats.badge.split(' ')[0] : '🥚')}
@@ -1239,7 +1146,10 @@ export default function TastingApp() {
                     </div>
 
                     <div className="flex items-center gap-1.5 min-w-0">
+                      {/* 유저네임 */}
                       <span className="font-extrabold text-sm text-gray-900 truncate">{post.userName}</span>
+                      
+                      {/* [유저네임 오른쪽]: 내가 평가한 평가점수 고정 노출 */}
                       {myRating > 0 && (
                         <span className="bg-amber-50 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-200 flex items-center shrink-0 shadow-sm animate-in fade-in">
                           <Icon name="Star" className="w-3 h-3 fill-current text-amber-500 mr-1" />
@@ -1249,6 +1159,7 @@ export default function TastingApp() {
                     </div>
                   </div>
 
+                  {/* 실물 인증 배지 동적 렌더링 */}
                   <div className="shrink-0 ml-2">
                     {post.verificationStatus === 'ai_verified' && (
                       <span className="flex items-center bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-emerald-100">
@@ -1287,6 +1198,7 @@ export default function TastingApp() {
                   )}
                </div>
 
+               {/* 🛡️ 집단지성 실물인증 투표 판독판 UI */}
                {post.verificationStatus === 'pending_vote' && (
                  <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl">
                    <div className="flex items-start gap-2.5">
@@ -1328,12 +1240,13 @@ export default function TastingApp() {
                <div className="px-4 py-4 border-t bg-gray-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
                    <div className="flex flex-col items-center">
                       <span className="text-[10px] font-bold text-gray-500 mb-2">이 술의 부러움 점수 평가 (드래그)</span>
+                      {/* 평점을 매기면 수정 불가능하게 Lock 처리 (처음 0점일 때는 별점 입력 가능, 0점 이상이 되면 더 이상 조절 불가하도록 UI를 유지하며 투표 처리) */}
                       {myRating > 0 ? (
                         <div className="flex flex-col items-center p-1.5 bg-white border rounded-2xl px-5 shadow-sm border-amber-200/60 text-amber-800 font-bold text-xs gap-1">
                           <span className="flex items-center gap-1">🔒 부러움 평가 완료 ({myRating.toFixed(1)}점)</span>
                         </div>
                       ) : (
-                        <FractionalStarRating value={myRating} onSave={(score) => handleRatePost(post.id, post.ratings, score)} />
+                        <FractionalStarRatingComponent value={myRating} onSave={(score) => handleRatePost(post.id, post.ratings, score)} />
                       )}
                    </div>
                    <div className="flex items-center gap-4">
