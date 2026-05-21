@@ -568,7 +568,6 @@ export default function TastingApp() {
       }
     };
 
-    // 503 과부하 대응을 위한 자동 재시도 설정 (최대 3회, 시간차 대기)
     const maxRetries = 3;
     let delay = 1500;
 
@@ -580,7 +579,6 @@ export default function TastingApp() {
           body: JSON.stringify(payload) 
         });
 
-        // 503 에러 발생 시 재시도 안내 및 지연 대기
         if (response.status === 503 && i < maxRetries - 1) {
           showToast(`⚠️ 구글 서버 과부하로 재시도 중입니다... (${i + 1}/${maxRetries}회)`, "info");
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -602,14 +600,6 @@ export default function TastingApp() {
             }
           }
 
-          const activeCategory = parsed.detectedCategory || selectedLiquorType;
-          const activeConfig = LIQUOR_CONFIG[activeCategory];
-          
-          const initialRatings = {};
-          activeConfig.criteria.forEach(c => initialRatings[c.id] = 0);
-          setRatings(initialRatings);
-          setExpandedAromaCategory(activeConfig.aromas[0].category);
-
           if (shareToCommunity) {
             if (parsed.isCodeDetected) {
               showToast("실물 인증코드가 성공적으로 감지되었습니다! 즉시 정식인증 마크가 부여됩니다.", "success");
@@ -617,7 +607,8 @@ export default function TastingApp() {
               showToast("쪽지 코드를 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.", "info");
             }
           }
-          break; // 성공했으므로 재시도 루프 종료
+          setIsAnalyzing(false); // 분석 성공 즉시 로딩 종료 스위치 다운
+          break; 
         } else {
           throw new Error("Empty response parts");
         }
@@ -625,12 +616,11 @@ export default function TastingApp() {
         if (i === maxRetries - 1) {
           setError("구글 서버 과부하로 인해 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요.");
           showToast("라벨 분석 실패: 서버 과부하", "error");
+          setIsAnalyzing(false); // 최종 실패 시에도 로딩 무조건 종료
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2;
         }
-      } finally {
-        if (i === maxRetries - 1) setIsAnalyzing(false);
       }
     }
   };
@@ -674,7 +664,9 @@ export default function TastingApp() {
           ...newNote,
           userId: user.uid,
           userName: userProfile.nickname,
-          totalCommunityScore: 0, ratings: { [user.uid]: overallRating }, originalRatings: ratings,
+          totalCommunityScore: 0,
+          ratings: { [user.uid]: overallRating },
+          originalRatings: ratings,
           comments: [],
           isVerified: verificationStatus === 'ai_verified',
           verificationStatus,
