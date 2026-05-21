@@ -222,7 +222,8 @@ export default function TastingApp() {
   const [commentInputs, setCommentInputs] = useState({});
   const [selectedImage, setSelectedImage] = useState(null);
   
-  // 인프라 버그 해결용: 라운지 전용 팝업창 모달 분리 변수 추가
+  // ⚡ [구조 혁신] 리액트 훅의 규칙 엄수: 서브 탭 상태 변수를 최상단 단일 구역으로 전진 배치하여 런타임 프리징 원천 봉쇄
+  const [subTab, setSubTab] = useState('lounge'); 
   const [isCommunityModal, setIsCommunityModal] = useState(false); 
 
   // Form State
@@ -344,7 +345,7 @@ export default function TastingApp() {
     return userBadges;
   }, [communityPosts]);
 
-  // 🔥 무한 루프 완치 안전 팝업 핸들러
+  // 무한 렌더링 루프를 원천 제거한 안전한 토스트 스위치
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
   };
@@ -664,6 +665,70 @@ export default function TastingApp() {
           delay *= 2;
         }
       }
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!analysisResult) {
+      showToast("라벨 분석이 아직 완료되지 않았습니다.", "error");
+      return;
+    }
+    if (!user) {
+      showToast("로그인이 완료되지 않았습니다.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const smallImage = image ? await compressImage(image, 300) : null;
+      
+      let verificationStatus = 'ai_verified';
+      if (shareToCommunity) {
+        verificationStatus = analysisResult.isCodeDetected ? 'ai_verified' : 'pending_vote';
+      }
+
+      const newNote = {
+        liquorType: selectedLiquorType,
+        analysisResult,
+        price: Number(price) || 0,
+        ratings,
+        selectedAromas,
+        personalNotes,
+        overallRating,
+        thumbnail: smallImage,
+        createdAt: Date.now()
+      };
+
+      const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
+      await addDoc(notesRef, newNote);
+      
+      if (shareToCommunity) {
+        const communityRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
+        await addDoc(communityRef, {
+          ...newNote,
+          userId: user.uid,
+          userName: userProfile.nickname,
+          totalCommunityScore: 0,
+          ratings: { [user.uid]: overallRating },
+          originalRatings: ratings,
+          comments: [],
+          isVerified: verificationStatus === 'ai_verified',
+          verificationStatus,
+          verificationCodeUsed: verificationCode,
+          votes: {
+            voters: {},
+            yesCount: 0,
+            noCount: 0
+          }
+        });
+      }
+
+      showToast("테이스팅 노트가 안전하게 저장되었습니다!");
+      resetForm();
+      navigateTo('list');
+    } catch (err) {
+      showToast("저장 중 오류가 발생했습니다: " + err.message, "error");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1025,8 +1090,6 @@ export default function TastingApp() {
   );
 
   const renderCommunityView = () => {
-    const [subTab, setSubTab] = useState('lounge'); 
-
     let displayedPosts = [...communityPosts];
     if (communitySort === 'latest') displayedPosts.sort((a, b) => b.createdAt - a.createdAt);
     else if (communitySort === 'best') displayedPosts.sort((a, b) => (b.totalCommunityScore || 0) - (a.totalCommunityScore || 0));
@@ -1048,6 +1111,7 @@ export default function TastingApp() {
           </div>
         </div>
 
+        {/* 🎛️ 하이엔드 서브 슬라이딩 탭바 */}
         <div className="flex bg-gray-200/70 p-1 rounded-xl border border-gray-300/30">
           <button 
             onClick={() => setSubTab('lounge')}
@@ -1333,6 +1397,8 @@ export default function TastingApp() {
     );
   };
 
+  const [currentView, setCurrentView] = useState('community');
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-10">
       <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
@@ -1461,7 +1527,6 @@ export default function TastingApp() {
         </div>
       )}
 
-      {/* 📊 순수 개인 노트일 때만 오각형 스펙 모달 활성화 */}
       {selectedDetailNote && !isCommunityModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setSelectedDetailNote(null)}>
           <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto space-y-5 border shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -1507,7 +1572,6 @@ export default function TastingApp() {
         </div>
       )}
 
-      {/* 📱 라운지 전용 팝업 모달 스위치 연동 (변수 주소 완전 보정판) */}
       {selectedDetailNote && isCommunityModal && (
         <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedDetailNote(null)}>
           <div className="bg-white rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto space-y-4 border shadow-2xl relative" onClick={e => e.stopPropagation()}>
@@ -1596,7 +1660,6 @@ export default function TastingApp() {
                 <div className="space-y-2">
                   <p className="text-xs font-black text-gray-800 flex items-center gap-1">💬 댓글 채팅 목록 ({selectedDetailNote.comments?.length || 0}개)</p>
                   <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                    {/* 🔥 런타임 에러 완치 필터 가동: post 변수 잔상을 selectedDetailNote 정석 포인터로 일괄 갱신 교정 */}
                     {(selectedDetailNote.comments || []).map(c => {
                       const commenterRating = selectedDetailNote.ratings?.[c.userId] || 0;
                       return (
