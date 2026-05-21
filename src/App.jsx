@@ -187,58 +187,49 @@ const compressImage = (base64Str, maxWidth = 400) => {
 
 const FractionalStarRating = ({ value, onChange, onSave }) => {
   const [hoverValue, setHoverValue] = useState(null);
-  const containerRef = useRef(null);
-
-  const handlePointerMove = (e) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    let x = e.clientX;
-    if (e.touches && e.touches.length > 0) x = e.touches[0].clientX;
-    const relativeX = Math.max(0, Math.min(x - rect.left, rect.width));
-    let val = (relativeX / rect.width) * 5;
-    val = Math.max(0.1, Math.round(val * 10) / 10);
-    setHoverValue(val);
-  };
-
-  const handlePointerUp = () => {
-    if (hoverValue !== null) {
-      onChange && onChange(hoverValue);
-      onSave && onSave(hoverValue);
-      setHoverValue(null);
-    }
-  };
-
+  const ratingRef = useRef(null);
   const displayValue = hoverValue !== null ? hoverValue : value;
 
+  const handleMouseMove = (e) => {
+    if (!ratingRef.current) return;
+    const rect = ratingRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const width = rect.width;
+    const percent = Math.min(Math.max(x / width, 0), 1);
+    const calculated = Math.round(percent * 5 * 2) / 2;
+    setHoverValue(calculated);
+  };
+
+  const handleMouseLeave = () => setHoverValue(null);
+  const handleClick = () => { if (onChange) onChange(displayValue); };
+
   return (
-    <div className="flex flex-col items-center">
-        <span className="text-xl font-black text-amber-500 mb-1">{displayValue.toFixed(1)}</span>
-        <div
-          ref={containerRef}
-          className="flex space-x-1 cursor-pointer touch-none"
-          onPointerDown={handlePointerMove}
-          onPointerMove={(e) => { if (e.buttons > 0) handlePointerMove(e); }}
-          onTouchMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onTouchEnd={handlePointerUp}
-          onPointerLeave={() => setHoverValue(null)}
-        >
-          {[1, 2, 3, 4, 5].map((star) => {
-            const fillPercentage = Math.max(0, Math.min(1, displayValue - (star - 1))) * 100;
-            return (
-              <div key={star} className="relative w-8 h-8 text-gray-300 drop-shadow-sm">
-                <Icon name="Star" className="w-8 h-8 absolute top-0 left-0" />
-                <div className="absolute top-0 left-0 overflow-hidden text-amber-400" style={{ width: `${fillPercentage}%` }}>
-                  <Icon name="Star" className="w-8 h-8 fill-current" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+    <div className="flex items-center space-x-2 bg-white px-3 py-1 rounded-xl border border-gray-100 shadow-sm">
+      <div 
+        ref={ratingRef}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
+        className="flex cursor-pointer py-1 select-none"
+      >
+        {[1, 2, 3, 4, 5].map((star) => {
+          const isFull = displayValue >= star;
+          const isHalf = !isFull && displayValue >= star - 0.5;
+          return (
+            <button key={star} type="button" className="p-0.5 focus:outline-none transition-transform active:scale-110">
+              <Icon 
+                name="Star" 
+                className={`w-5 h-5 ${isFull ? 'text-amber-400 fill-current' : isHalf ? 'text-amber-400 fill-current' : 'text-gray-200'}`} 
+                style={isHalf ? { clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0% 100%)' } : undefined}
+              />
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-sm font-black text-amber-500 font-mono shrink-0 bg-amber-50/50 px-2 py-0.5 rounded border border-amber-100">{displayValue.toFixed(1)}</span>
     </div>
   );
 };
-
 export default function TastingApp() {
   const [user, setUser] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -272,6 +263,7 @@ export default function TastingApp() {
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [nicknameInput, setNicknameInput] = useState('');
   const [selectedDetailNote, setSelectedDetailNote] = useState(null);
+  const [openComments, setOpenComments] = useState({});
   const [showRankModal, setShowRankModal] = useState(false);
 
   // Search Grounding
@@ -682,8 +674,7 @@ export default function TastingApp() {
           ...newNote,
           userId: user.uid,
           userName: userProfile.nickname,
-          totalCommunityScore: 0,
-          ratings: {}, 
+          totalCommunityScore: 0, ratings: { [user.uid]: overallRating }, originalRatings: ratings,
           comments: [],
           isVerified: verificationStatus === 'ai_verified',
           verificationStatus,
@@ -1187,33 +1178,57 @@ export default function TastingApp() {
                </div>
 
                <div className="p-4 border-t border-gray-100 bg-gray-50">
-                  <div className="space-y-2 mb-3">
-                    {(post.comments || []).map(c => {
-                      const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
-                      const commenterRating = post.ratings?.[c.userId] || 0;
-                      return (
-                        <div key={c.id} className="text-sm flex items-center justify-between flex-wrap gap-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-[10px]" title={commenterStats.badge}>
-                              {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
-                            </span>
-                            <span className="font-bold text-gray-800">{c.userId === user?.uid ? userProfile.nickname : (c.userName || '알콜러')}</span><span className="text-[9px] text-gray-400 font-normal ml-1 shrink-0">{formatTimeAgo(c.createdAt)}</span>
-                            <span className="text-gray-600 font-medium">{c.text}</span>
-                          </div>
-                          {commenterRating > 0 && (
-                            <span className="text-[9px] bg-amber-50 text-amber-800 font-bold px-1.5 py-0.5 rounded border border-amber-100 flex items-center">
-                              ★ {commenterRating.toFixed(1)}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="flex gap-2">
-                    <input type="text" value={commentInputs[post.id] || ''} onChange={e => setCommentInputs(p => ({...p, [post.id]: e.target.value}))} placeholder="댓글을 남기고 점수를 고정하세요!" className="flex-1 rounded-full border bg-white px-4 py-1.5 text-sm outline-none" />
-                    <button onClick={() => handleAddComment(post.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors"><Icon name="Send" className="w-3 h-3 ml-0.5"/></button>
-                  </div>
-               </div>
+  <button 
+    onClick={() => setOpenComments(p => ({...p, [post.id]: !p[post.id]}))} 
+    className="w-full flex items-center justify-between py-2 text-xs font-black text-gray-500 hover:text-indigo-600 transition-colors mb-2 bg-white px-3 rounded-xl border border-gray-200/60 shadow-sm"
+  >
+    <span className="flex items-center gap-1.5">💬 댓글 {(post.comments || []).length}개 {openComments[post.id] ? '접기' : '모두 보기'}</span>
+    <span className="text-[10px] text-gray-400">{openComments[post.id] ? '▲' : '▼'}</span>
+  </button>
+  
+  <div className={`space-y-3 transition-all duration-300 ${openComments[post.id] ? 'block' : 'hidden'}`}>
+    <div className="space-y-2 mb-3 max-h-[250px] overflow-y-auto pr-1">
+      {(post.comments || []).map(c => {
+        const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
+        const commenterRating = post.ratings?.[c.userId] || 0;
+        return (
+          <div key={c.id} className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-[9px]" title={commenterStats.badge}>
+                {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
+              </span>
+              <span className="font-extrabold text-gray-800">{c.userId === user?.uid ? userProfile.nickname : (c.userName || '알콜러')}</span>
+              {commenterRating > 0 && <span className="text-[10px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
+              <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
+            </div>
+            <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
+          </div>
+        );
+      })}
+      {(post.comments || []).length === 0 && (
+        <p className="text-[11px] text-gray-400 text-center py-2 font-medium">첫 번째 댓글을 남겨보세요! ✍️</p>
+      )}
+    </div>
+
+    <div className="flex gap-2">
+      <input
+        type="text"
+        placeholder="댓글을 남기고 점수를 고정하세요!"
+        value={commentInputs[post.id] || ''}
+        onChange={(e) => setCommentInputs(p => ({ ...p, [post.id]: e.target.value }))}
+        onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
+        className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner"
+      />
+      <button 
+        onClick={() => handleAddComment(post.id)} 
+        className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"
+      >
+        <Icon name="Send" className="w-3 h-3 ml-0.5"/>
+      </button>
+    </div>
+  </div>
+</div>
+
             </div>
           );
         })}
@@ -1415,16 +1430,7 @@ export default function TastingApp() {
             
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
               <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">📊 테이스팅 오각형 밸런스 지표</h4>
-              {selectedDetailNote.ratings && Object.keys(selectedDetailNote.ratings).length > 0 ? (
-                Object.entries(selectedDetailNote.ratings).map(([key, val]) => (
-                  <div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0">
-                    <span className="text-gray-600">{key === 'sweetness' ? '당도' : key === 'acidity' ? '산도' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'peat' ? '피트향' : key === 'spicy' ? '스파이시' : key === 'finish' ? '피니시' : key.toUpperCase()}</span>
-                    <span className="text-indigo-600 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-gray-400 text-center py-2">기록된 세부 슬라이더 지표가 없습니다.</p>
-              )}
+              {selectedDetailNote.originalRatings || selectedDetailNote.ratings ? Object.entries(selectedDetailNote.originalRatings || selectedDetailNote.ratings).map(([key, val]) => { if (typeof val === 'object' || !['sweetness','acidity','tannin','body','peat','spicy','finish'].includes(key)) return null; return ( <div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0"> <span className="text-gray-600">{key === 'sweetness' ? '당도' : key === 'acidity' ? '산도' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'peat' ? '피트향' : key === 'spicy' ? '스파이시' : key === 'finish' ? '피니시' : key.toUpperCase()}</span> <span className="text-indigo-600 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span> </div> ); }) : <p className="text-xs text-gray-400 text-center py-2">기록된 세부 슬라이더 지표가 없습니다.</p>}
             </div>
 
             {selectedDetailNote.selectedAromas && selectedDetailNote.selectedAromas.length > 0 && (
