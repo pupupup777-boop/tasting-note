@@ -1201,7 +1201,9 @@ export default function TastingApp() {
                </div>
 
                {post.verificationStatus === 'pending_vote' && 
-                user && !user.isAnonymous && 
+                user && 
+                !user.isAnonymous && 
+                (user.providerData && user.providerData.length > 0) &&
                 post.votes?.voters?.[user?.uid] === undefined && (
                  <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left animate-in fade-in duration-300">
                    <div className="flex items-start gap-2.5">
