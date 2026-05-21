@@ -344,11 +344,18 @@ export default function TastingApp() {
     return userBadges;
   }, [communityPosts]);
 
+  // 🔥 무한 루프 완벽 치유 보정 로직
   const showToast = (message, type = 'success') => {
-    toast.show && setToast({ show: false, message: '', type: 'success' });
     setToast({ show: true, message, type });
-    setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
   };
+
+  // 자동 초기화 전용 세션 타이머 분리
+  useEffect(() => {
+    if (toast.show) {
+      const timer = setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.show]);
 
   const resetForm = () => {
     setImage(null);
@@ -1235,7 +1242,7 @@ export default function TastingApp() {
                           <div className="flex flex-col gap-1 mt-2 w-full">
                             <div className="flex justify-between items-center text-[11px] font-black text-indigo-950">
                               <span className="flex items-center gap-0.5"><Icon name="Star" className="w-3.5 h-3.5 fill-current text-amber-500" /> 누적 부러움 총점</span>
-                              <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-indigo-700 font-mono">{(post.totalCommunityScore || 0).toFixed(1)} 점</span>
+                              <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-indigo-700 font-mono">{post.totalCommunityScore ? post.totalCommunityScore.toFixed(1) : "0.0"} 점</span>
                             </div>
                             <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden border border-gray-200/40 shadow-inner">
                               <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
@@ -1519,7 +1526,7 @@ export default function TastingApp() {
         </div>
       )}
 
-      {/* 📊 순수 개인 노트일 때만 오각형 스펙 모달 활성화 (충돌 완전 차단) */}
+      {/* 📊 순수 개인 노트일 때만 오각형 스펙 모달 활성화 */}
       {selectedDetailNote && !isCommunityModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setSelectedDetailNote(null)}>
           <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto space-y-5 border shadow-2xl" onClick={e => e.stopPropagation()}>
