@@ -443,13 +443,19 @@ export default function TastingApp() {
   
   const handleLogout = async () => {
     try {
-      const { signOut } = await import('firebase/auth');
-      await signOut(auth);
-      // 로그아웃 시 다시 안전하게 비회원 익명 세션으로 자동 롤백 연동
+      // 1. 이미 파일 상단에 주입된 auth 객체를 이용해 안전하게 세션 먼저 종료
+      await auth.signOut();
+      
+      // 2. 익명 로그인 전환 시 발생할 수 있는 비동기 충돌을 막기 위해 0.1초의 미세한 텀(Delay)을 줍니다.
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 3. 상단에 이미 임포트되어 있는 익명 로그인 함수 정석 호출
       await signInAnonymously(auth);
+      
       setShowNicknameModal(false);
       showToast("안전하게 로그아웃되었습니다.", "info");
     } catch (err) {
+      console.error("Logout runtime error:", err);
       showToast("로그아웃 처리 중 오류가 발생했습니다.", "error");
     }
   };  
