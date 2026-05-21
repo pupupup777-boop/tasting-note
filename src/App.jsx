@@ -1303,7 +1303,28 @@ export default function TastingApp() {
             <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 hover:text-black transition-colors"><Icon name="Menu" className="w-6 h-6" /></button>
             <h1 className="text-lg font-black ml-2 tracking-tight">TastingNote</h1>
           </div>
-          <button onClick={() => navigateTo('add')} className="text-sm font-bold bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-full flex items-center transition-colors"><Icon name="PlusCircle" className="w-4 h-4 mr-1" /> 새 리뷰</button>
+          
+          {/* 오른쪽 상단 로그인 상태 및 새 리뷰 버튼 정렬 구역 */}
+          <div className="flex items-center space-x-2">
+            {user && !user.isAnonymous ? (
+              // 로그인 완료 시: 내 닉네임을 상단에 부드럽게 표출
+              <span className="text-xs font-black bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 max-w-[100px] truncate">
+                👤 {userProfile.nickname}
+              </span>
+            ) : (
+              // 미로그인(익명) 상태 시: 즉시 구글 팝업을 실행하는 로그인 버튼 노출
+              <button 
+                onClick={handleGoogleLogin} 
+                className="text-xs font-bold text-gray-600 hover:text-black bg-gray-50 border border-gray-200 hover:bg-gray-100 px-2.5 py-1.5 rounded-full transition-all"
+              >
+                로그인
+              </button>
+            )}
+            
+            <button onClick={() => navigateTo('add')} className="text-sm font-bold bg-gray-900 hover:bg-black text-white px-3 py-1.5 rounded-full flex items-center shadow-sm transition-colors">
+              <Icon name="PlusCircle" className="w-4 h-4 mr-1" /> 새 리뷰
+            </button>
+          </div>
         </div>
       </header>
 
