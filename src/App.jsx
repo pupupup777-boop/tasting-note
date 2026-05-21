@@ -1183,7 +1183,7 @@ export default function TastingApp() {
               const avgScore = post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length) : 0;
 
               return (
-                <div key={post.id} onClick={() => setSelectedDetailNote(post)} className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm flex flex-col hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group relative">
+                <div key={post.id} onClick={() => { setSelectedDetailNote(post); setOpenComments(p => ({...p, [post.id]: true})); }} className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm flex flex-col hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group relative">
                   
                   {/* 대형 썸네일 전면 배치 구역 */}
                   <div className="aspect-square bg-gray-50 relative overflow-hidden border-b border-gray-100 shrink-0">
@@ -1620,6 +1620,144 @@ export default function TastingApp() {
           <div className="mt-6 text-center text-white/90 text-sm bg-black/60 px-5 py-2.5 rounded-full backdrop-blur-sm border border-white/20 shadow-lg flex items-center">
             <Icon name="ShieldCheck" className="w-5 h-5 mr-2 text-blue-400 animate-pulse" />
             사진 속의 자필 인증코드를 눈으로 대조하여 도용을 직접 판정하세요!
+          </div>
+        </div>
+      )}
+      {/* 📱 [인프라 추가] 라운지 격자 아이템 클릭 시 열리는 인스타형 대형 상세 보기 모달 */}
+      {selectedDetailNote && !notes.some(n => n.id === selectedDetailNote.id) && (
+        <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedDetailNote(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto space-y-4 border shadow-2xl relative" onClick={e => e.stopPropagation()}>
+            
+            {/* 상단 닫기 헤더 바 */}
+            <div className="p-4 border-b flex justify-between items-center bg-gray-50/50 sticky top-0 z-10 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black text-gray-400">보틀 라운지 상세보기</span>
+              </div>
+              <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors">
+                <Icon name="X" className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            {/* 본문 콘텐츠 스크롤 구역 */}
+            <div className="p-4 space-y-4">
+              
+              {/* 1. 대형 비주얼 이미지 뷰어 */}
+              <div className="w-full aspect-video bg-gray-50 rounded-2xl overflow-hidden border relative shadow-inner">
+                {selectedDetailNote.thumbnail ? (
+                  <img src={selectedDetailNote.thumbnail} className="w-full h-full object-cover" alt="Detail Bottle" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-5xl">
+                    {LIQUOR_CONFIG[selectedDetailNote.liquorType]?.icon || '🍷'}
+                  </div>
+                )}
+                <div className="absolute bottom-2 left-2 bg-black/60 text-white font-black text-[10px] px-2 py-0.5 rounded-md backdrop-blur-sm">
+                  {selectedDetailNote.analysisResult?.type}
+                </div>
+              </div>
+
+              {/* 2. 타이틀 및 주종 요약 */}
+              <div className="space-y-1">
+                <h3 className="font-black text-lg text-gray-900 leading-tight">{selectedDetailNote.analysisResult?.name || '이름 없음'}</h3>
+                <div className="flex items-center gap-2 text-xs text-gray-400 font-bold">
+                  <span>by {selectedDetailNote.userName || '지나간 보틀러'}</span>
+                  <span>•</span>
+                  <span>{formatTimeAgo(selectedDetailNote.createdAt)}</span>
+                </div>
+              </div>
+
+              {/* 3. 누적 부러움 스코어보드 게이지 */}
+              <div className="bg-indigo-50/40 border border-indigo-100/60 p-3.5 rounded-2xl space-y-1.5">
+                <div className="flex justify-between items-center text-xs font-black text-indigo-950">
+                  <span className="flex items-center gap-0.5">⭐ 누적 부러움 점수</span>
+                  <span className="text-indigo-600 font-mono">{(selectedDetailNote.totalCommunityScore || 0).toFixed(1)} 점</span>
+                </div>
+                <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden shadow-inner">
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full" style={{ width: `${Math.min(100, ((selectedDetailNote.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
+                </div>
+              </div>
+
+              {/* 4. 오늘의 한줄평 소회 */}
+              {selectedDetailNote.personalNotes && (
+                <div className="text-sm text-gray-700 bg-slate-50 p-4 rounded-2xl border border-gray-100 font-medium leading-relaxed italic">
+                  "{selectedDetailNote.personalNotes}"
+                </div>
+              )}
+
+              {/* 5. [철통 연동] 실물 인증 가드 투표 박스 */}
+              {selectedDetailNote.verificationStatus === 'pending_vote' && 
+               user && !user.isAnonymous && 
+               (user.providerData && user.providerData.length > 0) &&
+               selectedDetailNote.votes?.voters?.[user?.uid] === undefined && (
+                <div className="p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left">
+                  <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 실물 인증인가요?</h4>
+                  <p className="text-[10px] text-amber-900 leading-relaxed mb-3">
+                    쪽지에 적힌 <b>{selectedDetailNote.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요!
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleVoteVerification(selectedDetailNote.id, 'yes')} className="flex-1 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 font-bold border rounded-xl text-xs shadow-sm">👍 보인다!</button>
+                    <button onClick={() => handleVoteVerification(selectedDetailNote.id, 'no')} className="flex-1 py-1.5 bg-white hover:bg-rose-50 text-rose-600 font-bold border rounded-xl text-xs shadow-sm">👎 안 보인다</button>
+                  </div>
+                </div>
+              )}
+
+              {/* 6. [핵심 연동] 부러움 드래그 바 및 일체형 실시간 댓글 컴포넌트 패키지 */}
+              <div className="border-t border-gray-100 pt-3 space-y-3.5">
+                <div className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-xl border border-gray-200/60 shadow-inner gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-black text-gray-500 tracking-tight">부러움 점수 드래그 평가</p>
+                  </div>
+                  {selectedDetailNote.ratings?.[user?.uid] > 0 && selectedDetailNote.comments?.some(c => c.userId === user?.uid) ? (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-sm whitespace-nowrap">
+                      🔒 평가 완료 ({(selectedDetailNote.ratings?.[user?.uid] || 0).toFixed(1)}점)
+                    </div>
+                  ) : (
+                    <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; handleRatePost(selectedDetailNote.id, selectedDetailNote.ratings, calculated); }}>
+                      <FractionalStarRating value={selectedDetailNote.ratings?.[user?.uid] || 0} onChange={(score) => handleRatePost(selectedDetailNote.id, selectedDetailNote.ratings, score)} />
+                    </div>
+                  )}
+                </div>
+
+                {/* 실시간 댓글 채팅 메시지 타임라인 리스트 */}
+                <div className="space-y-2">
+                  <p className="text-xs font-black text-gray-800 flex items-center gap-1">💬 댓글 채팅 목록 ({selectedDetailNote.comments?.length || 0}개)</p>
+                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                    {(selectedDetailNote.comments || []).map(c => {
+                      const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
+                      const commenterRating = selectedDetailNote.ratings?.[c.userId] || 0;
+                      return (
+                        <div key={c.id} className="text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-extrabold text-gray-800">{c.userName || '알콜러'}</span>
+                            {commenterRating > 0 && <span className="text-[9px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
+                            <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
+                          </div>
+                          <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
+                        </div>
+                      );
+                    })}
+                    {(selectedDetailNote.comments || []).length === 0 && (
+                      <p className="text-[11px] text-gray-400 text-center py-4 font-medium">아직 대화가 없습니다. 첫 한줄평 댓글을 달아보세요! ✍️</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* 댓글 전송 인풋 창 */}
+                <div className="flex gap-2 pt-1 border-t border-gray-100">
+                  <input 
+                    type="text" 
+                    placeholder="매너 있는 댓글 한마디를 남겨보세요!" 
+                    value={commentInputs[selectedDetailNote.id] || ''} 
+                    onChange={(e) => setCommentInputs(p => ({ ...p, [selectedDetailNote.id]: e.target.value }))} 
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddComment(selectedDetailNote.id)} 
+                    className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" 
+                  />
+                  <button onClick={() => handleAddComment(selectedDetailNote.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md">
+                    <Icon name="Send" className="w-3 h-3 ml-0.5"/>
+                  </button>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
       )}
