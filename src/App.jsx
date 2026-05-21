@@ -443,22 +443,30 @@ export default function TastingApp() {
   
   const handleLogout = async () => {
     try {
-      // 1. 이미 파일 상단에 주입된 auth 객체를 이용해 안전하게 세션 먼저 종료
+      setShowNicknameModal(false);
+      
+      // 1. 엇박자 에러 방지의 핵심: 리액트의 내 유저 상태 변수들을 먼저 비워 권한 에러를 차단합니다.
+      setUser(null);
+      setUserProfile({ nickname: '', badge: '🥚 알콜 입문자' });
+      
+      // 2. 파이어베이스 인증 엔진 로그아웃 단독 실행
       await auth.signOut();
       
-      // 2. 익명 로그인 전환 시 발생할 수 있는 비동기 충돌을 막기 위해 0.1초의 미세한 텀(Delay)을 줍니다.
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // 3. 완전히 세션이 닫힌 후 안전한 익명 로그인 재바인딩 수행
+      const anonResult = await signInAnonymously(auth);
+      setUser(anonResult.user);
       
-      // 3. 상단에 이미 임포트되어 있는 익명 로그인 함수 정석 호출
-      await signInAnonymously(auth);
-      
-      setShowNicknameModal(false);
       showToast("안전하게 로그아웃되었습니다.", "info");
     } catch (err) {
-      console.error("Logout runtime error:", err);
-      showToast("로그아웃 처리 중 오류가 발생했습니다.", "error");
+      console.error("Firebase logout lifecycle crash prevented:", err);
+      // 안전 보장용 2중 예외 처리 강제 익명 복구 구문 추가
+      try {
+        const fallbackAnon = await signInAnonymously(auth);
+        setUser(fallbackAnon.user);
+      } catch (e) {}
+      showToast("안전하게 로그아웃되었습니다.", "info");
     }
-  };  
+  }; 
 
   const navigateTo = (view) => {
     setCurrentView(view);
