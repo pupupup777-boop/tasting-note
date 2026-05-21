@@ -1397,7 +1397,6 @@ export default function TastingApp() {
     );
   };
 
-  const [currentView, setCurrentView] = useState('community');
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-10">
