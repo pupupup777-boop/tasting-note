@@ -1151,22 +1151,23 @@ export default function TastingApp() {
                  </div>
                )}
 
-<div className="border-t border-gray-100 bg-gray-50/70 p-4 space-y-3">
+{/* 별점 평가와 댓글창이 하나로 묶인 결합형 컴포넌트 (너비 초과 해결 버전) */}
+               <div className="border-t border-gray-100 bg-gray-50/70 p-4 space-y-3.5">
                  
-                 {/* 1. 댓글창 바로 위에 찰떡처럼 붙은 부러움 드래그 바 */}
-                 <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200/60 shadow-sm">
-                   <div className="flex flex-col text-left">
-                     <span className="text-[10px] font-black text-gray-400">부러움 점수 드래그</span>
-                     <span className="text-[9px] text-indigo-500 font-medium">댓글 전송 시 이 점수로 자동 박제!</span>
+                 {/* 1. 부러움 드래그 바 (구조 단순화로 두 줄 밀림 완전 방지) */}
+                 <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200/60 shadow-sm gap-2">
+                   <div className="min-w-0 flex-1">
+                     <p className="text-[10px] font-black text-gray-500 tracking-tight">부러움 점수 평가</p>
+                     <p className="text-[9px] text-indigo-500 font-bold truncate">댓글 작성 시 점수 자동 고정!</p>
                    </div>
                    
                    {isRatingLocked ? (
-                     <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-xs px-3 py-1.5 rounded-xl flex items-center gap-1 shadow-sm">
+                     <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[11px] px-2.5 py-1.5 rounded-xl shadow-sm whitespace-nowrap">
                        🔒 평가 완료 ({myRating.toFixed(1)}점)
                      </div>
                    ) : (
                      <div 
-                       className="flex items-center space-x-2"
+                       className="shrink-0"
                        onTouchMove={(e) => {
                          if (!e.touches[0]) return;
                          const rect = e.currentTarget.getBoundingClientRect();
@@ -1184,18 +1185,18 @@ export default function TastingApp() {
                    )}
                  </div>
 
-                 {/* 2. 기존 아코디언 댓글 접기/펴기 버튼 */}
+                 {/* 2. 날씬한 1줄 고정형 아코디언 버튼 (너비 확보용 패딩 최적화) */}
                  <button 
                    onClick={() => setOpenComments(p => ({...p, [post.id]: !p[post.id]}))} 
                    className="w-full flex items-center justify-between py-2 text-xs font-black text-gray-500 hover:text-indigo-600 transition-colors bg-white px-3 rounded-xl border border-gray-200/60 shadow-sm"
                  >
-                   <span className="flex items-center gap-1.5">💬 댓글 {(post.comments || []).length}개 {openComments[post.id] ? '접기' : '모두 보기'}</span>
-                   <span className="text-[10px] text-gray-400">{openComments[post.id] ? '▲' : '▼'}</span>
+                   <span className="flex items-center gap-1.5 whitespace-nowrap">💬 댓글 {(post.comments || []).length}개 {openComments[post.id] ? '접기' : '모두 보기'}</span>
+                   <span className="text-[10px] text-gray-400 shrink-0">{openComments[post.id] ? '▲' : '▼'}</span>
                  </button>
                  
-                 {/* 3. 댓글 리스트 및 입력창 구역 */}
-                 <div className={`space-y-3 transition-all duration-300 ${openComments[post.id] ? 'block' : 'hidden'}`}>
-                   <div className="space-y-2 mb-2 max-h-[250px] overflow-y-auto pr-1">
+                 {/* 3. 아코디언 클릭 시 펼쳐지는 '과거 댓글 리스트만' 관리 */}
+                 <div className={`transition-all duration-300 ${openComments[post.id] ? 'block animate-in fade-in slide-in-from-top-1' : 'hidden'}`}>
+                   <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                      {(post.comments || []).map(c => {
                        const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
                        const commenterRating = post.ratings?.[c.userId] || 0;
@@ -1217,27 +1218,28 @@ export default function TastingApp() {
                        <p className="text-[11px] text-gray-400 text-center py-2 font-medium">첫 번째 댓글을 남겨보세요! ✍️</p>
                      )}
                    </div>
+                 </div>
 
-                   <div className="flex gap-2">
-                     <input
-                       type="text"
-                       placeholder="댓글을 남기고 점수를 고정하세요!"
-                       value={commentInputs[post.id] || ''}
-                       onChange={(e) => setCommentInputs(p => ({ ...p, [post.id]: e.target.value }))}
-                       onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
-                       className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner"
-                     />
-                     <button 
-                       onClick={() => handleAddComment(post.id)} 
-                       className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"
-                     >
-                       <Icon name="Send" className="w-3 h-3 ml-0.5"/>
-                     </button>
-                   </div>
+                 {/* 4. 아코디언과 무관하게 항상 하단에 고정된 댓글 입력창 */}
+                 <div className="flex gap-2 pt-1 border-t border-gray-200/50">
+                   <input
+                     type="text"
+                     placeholder="댓글을 남기고 점수를 고정하세요!"
+                     value={commentInputs[post.id] || ''}
+                     onChange={(e) => setCommentInputs(p => ({ ...p, [post.id]: e.target.value }))}
+                     onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
+                     className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner"
+                   />
+                   <button 
+                     onClick={() => handleAddComment(post.id)} 
+                     className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"
+                   >
+                     <Icon name="Send" className="w-3 h-3 ml-0.5"/>
+                   </button>
                  </div>
 
                </div>
-               
+
                <div className="p-4 border-t border-gray-100 bg-gray-50">
   <button 
     onClick={() => setOpenComments(p => ({...p, [post.id]: !p[post.id]}))} 
