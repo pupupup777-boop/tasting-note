@@ -1115,215 +1115,264 @@ export default function TastingApp() {
   );
 
   const renderCommunityView = () => {
+    // 탭 구분을 위한 내부 서브 상태 스위치 (lounge: 2열 격자 자유게시판 / ranking: 1열 대형 명예의 전당)
+    const [subTab, setSubTab] = useState('lounge'); 
+
     let displayedPosts = [...communityPosts];
     if (communitySort === 'latest') displayedPosts.sort((a, b) => b.createdAt - a.createdAt);
     else if (communitySort === 'best') displayedPosts.sort((a, b) => (b.totalCommunityScore || 0) - (a.totalCommunityScore || 0));
 
     return (
-      <div className="space-y-6 animate-in fade-in">
-        <div className="bg-gradient-to-r from-gray-900 to-black rounded-2xl p-6 text-white shadow-md">
-          <h2 className="text-xl font-bold flex items-center mb-2"><Icon name="Users" className="w-6 h-6 mr-2 text-gray-300" /> 보틀 라운지</h2>
-          <div onClick={() => setShowRankModal(true)} className="bg-white/10 rounded-lg px-3 py-2 text-sm font-medium border border-white/20 inline-block cursor-pointer hover:bg-white/20 transition-all active:scale-95">내 칭호: <span className="text-yellow-400 font-bold">{userStats[user?.uid]?.badge || '🥚 알콜 입문자'}</span> 🔍</div>
+      <div className="space-y-4 animate-in fade-in duration-300">
+        
+        {/* 🔥 상단 대형 명예 대시보드 */}
+        <div className="bg-gradient-to-r from-gray-900 via-slate-900 to-black rounded-2xl p-5 text-white shadow-xl relative overflow-hidden">
+          <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none transform rotate-12">
+            <Icon name="Users" className="w-40 h-40" />
+          </div>
+          <div className="relative z-10">
+            <h2 className="text-lg font-black flex items-center mb-1.5">
+              <Icon name="Users" className="w-5 h-5 mr-2 text-indigo-400" /> 커뮤니티 스퀘어
+            </h2>
+            <div onClick={() => setShowRankModal(true)} className="bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-sm">
+              내 칭호: <span className="text-yellow-400 font-black">{userStats[user?.uid]?.badge || '🥚 알콜 입문자'}</span> 🔍
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-gray-100">
-           <div className="flex gap-2 overflow-x-auto hide-scrollbar snap-x flex-1">
-             <button onClick={() => setCommunityFilter('all')} className={`snap-start px-4 py-1.5 rounded-full text-sm font-bold ${communityFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>전체</button>
-             {Object.values(LIQUOR_CONFIG).map(l => (
-               <button key={l.id} onClick={() => setCommunityFilter(l.id)} className={`snap-start px-4 py-1.5 rounded-full text-sm font-bold whitespace-nowrap ${communityFilter === l.id ? `${getThemeClasses(l.theme).btnBg} text-white` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>{l.icon} {l.name}</button>
-             ))}
-           </div>
-           <select onChange={(e) => setCommunitySort(e.target.value)} className="text-xs bg-gray-50 border border-gray-200 rounded p-1.5 ml-2 outline-none cursor-pointer">
-             <option value="latest">최신순</option>
-             <option value="best">베스트</option>
-           </select>
+        {/* 🎛️ 하이엔드 서브 슬라이딩 탭바 (자유게시판 vs 랭킹 전용 스위치) */}
+        <div className="flex bg-gray-200/70 p-1 rounded-xl border border-gray-300/30">
+          <button 
+            onClick={() => setSubTab('lounge')}
+            className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${subTab === 'lounge' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            💬 보틀 라운지 <span className="text-[10px] font-medium opacity-60">({displayedPosts.length})</span>
+          </button>
+          <button 
+            onClick={() => setSubTab('ranking')}
+            className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${subTab === 'ranking' ? 'bg-white text-indigo-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+          >
+            👑 명예 보틀 랭킹
+          </button>
         </div>
 
-        {displayedPosts.filter(p => communityFilter === 'all' || p.liquorType === communityFilter).map(post => {
-          const authorStats = userStats[post.userId] || { badge: '🥚 알콜 입문자', isTop: false, rank: '-' };
-          const myRating = post.ratings?.[user?.uid] || 0;
-          const conf = LIQUOR_CONFIG[post.liquorType] || LIQUOR_CONFIG.wine;
+        {/* 🔍 카테고리 필터 & 정렬 필터 바 (라운지 탭일 때만 표출하여 화면 정돈) */}
+        {subTab === 'lounge' && (
+          <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-gray-100 gap-2">
+            <div className="flex gap-1.5 overflow-x-auto hide-scrollbar snap-x flex-1">
+              <button onClick={() => setCommunityFilter('all')} className={`snap-start px-3 py-1 rounded-full text-xs font-black ${communityFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-500 border hover:bg-gray-100'}`}>전체</button>
+              {Object.values(LIQUOR_CONFIG).map(l => (
+                <button key={l.id} onClick={() => setCommunityFilter(l.id)} className={`snap-start px-3 py-1 rounded-full text-xs font-black whitespace-nowrap ${communityFilter === l.id ? `${getThemeClasses(l.theme).btnBg} text-white` : 'bg-gray-50 text-gray-500 border hover:bg-gray-100'}`}>{l.icon} {l.name}</button>
+              ))}
+            </div>
+            <select onChange={(e) => setCommunitySort(e.target.value)} value={communitySort} className="text-[10px] font-black bg-gray-50 border border-gray-200 rounded-lg p-1.5 outline-none cursor-pointer text-gray-700 shrink-0">
+              <option value="latest">최신순</option>
+              <option value="best">베스트</option>
+            </select>
+          </div>
+        )}
 
-          // Locks evaluation inputs upon posting comment to prevent abuses
-          const hasCommented = post.comments?.some(c => c.userId === user?.uid);
-          const isRatingLocked = myRating > 0 && hasCommented;
+        {/* ========================================================
+            [모드 A] 보틀 라운지: 한눈에 피드가 가득 들어오는 힙한 2열 인스타형 격자
+            ======================================================== */}
+        {subTab === 'lounge' && (
+          <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-300">
+            {displayedPosts.filter(p => communityFilter === 'all' || p.liquorType === communityFilter).map(post => {
+              const conf = LIQUOR_CONFIG[post.liquorType] || LIQUOR_CONFIG.wine;
+              const myRating = post.ratings?.[user?.uid] || 0;
+              const avgScore = post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length) : 0;
 
-          return (
-            <div key={post.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-               <div className="p-4 flex items-center justify-between border-b border-gray-50 bg-gray-50/20">
-                  <div className="flex items-center min-w-0">
-                    <div className="flex items-center shrink-0">
-                      <span className="text-base mr-1.5" title={authorStats.badge}>
-                        {authorStats.isTop ? '🏆' : (authorStats.badge ? authorStats.badge.split(' ')[0] : '🥚')}
+              return (
+                <div key={post.id} onClick={() => setSelectedDetailNote(post)} className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm flex flex-col hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group relative">
+                  
+                  {/* 대형 썸네일 전면 배치 구역 */}
+                  <div className="aspect-square bg-gray-50 relative overflow-hidden border-b border-gray-100 shrink-0">
+                    {post.thumbnail ? (
+                      <img src={post.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="Bottle" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-4xl bg-slate-50">{conf.icon}</div>
+                    )}
+                    
+                    {/* 상단 오버레이 주종 뱃지 */}
+                    <span className={`absolute top-2 left-2 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm z-10 ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>
+                      {post.analysisResult?.type || conf.name}
+                    </span>
+
+                    {/* 실물인증 마크가 있다면 사진 우측상단 오버레이 박제 */}
+                    {post.isVerified && (
+                      <span className="absolute top-2 right-2 bg-emerald-500 text-white rounded-full p-0.5 shadow" title="인증 보틀">
+                        <Icon name="Check" className="w-3 h-3 stroke-[3]" />
                       </span>
-                      <span className="text-[10px] bg-slate-800 text-white px-1.5 py-0.5 rounded-full font-bold mr-2">
-                        {authorStats.rank}위
-                      </span>
+                    )}
+                  </div>
+
+                  {/* 텍스트 메타 정보 공간 (콤팩트 압축) */}
+                  <div className="p-2.5 flex-1 flex flex-col justify-between space-y-1.5">
+                    <div className="min-w-0">
+                      <p className="font-black text-gray-900 text-xs truncate leading-tight group-hover:text-indigo-600">{post.analysisResult?.name || '이름 없음'}</p>
+                      <p className="text-[10px] text-gray-400 font-bold mt-0.5 truncate">by {post.userId === user?.uid ? userProfile.nickname : (post.userName || '보틀러')}</p>
                     </div>
 
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="flex items-center gap-2 min-w-0"><span className="font-extrabold text-sm text-gray-900 truncate">{post.userId === user?.uid ? userProfile.nickname : (post.userName || '지나간 보틀러')}</span><span className="text-[10px] text-gray-400 font-medium shrink-0">{formatTimeAgo(post.createdAt)}</span></div>
-                      
-                      {myRating > 0 && (
-                        <span className="bg-amber-50 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-200 flex items-center shrink-0 shadow-sm animate-in fade-in">
-                          <Icon name="Star" className="w-3 h-3 fill-current text-amber-500 mr-1" />
-                          내 평가: {myRating.toFixed(1)}점
+                    <div className="flex items-center justify-between text-[10px] pt-1 border-t border-gray-50 flex-wrap gap-1">
+                      <span className="text-amber-500 font-black flex items-center">
+                        ★ {avgScore > 0 ? avgScore.toFixed(1) : "0.0"}
+                      </span>
+                      <span className="text-gray-400 font-medium">💬 {post.comments?.length || 0}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {displayedPosts.filter(p => communityFilter === 'all' || p.liquorType === communityFilter).length === 0 && (
+              <div className="col-span-2 text-center py-12 bg-white rounded-2xl border text-gray-400 font-medium text-xs">선택한 카테고리에 등록된 보틀이 없습니다.</div>
+            )}
+          </div>
+        )}
+
+        {/* ========================================================
+            [모드 B] 명예 보틀 랭킹: 오직 부러움 총점으로 세우는 명품 매거진형 1열 뷰 (기존 모든 기능 탑재)
+            ======================================================== */}
+        {subTab === 'ranking' && (
+          <div className="space-y-5 animate-in fade-in duration-300">
+            {[...communityPosts]
+              .sort((a, b) => (b.totalCommunityScore || 0) - (a.totalCommunityScore || 0))
+              .map((post, index) => {
+                const authorStats = userStats[post.userId] || { badge: '🥚 알콜 입문자', isTop: false, rank: '-' };
+                const myRating = post.ratings?.[user?.uid] || 0;
+                const conf = LIQUOR_CONFIG[post.liquorType] || LIQUOR_CONFIG.wine;
+                const hasCommented = post.comments?.some(c => c.userId === user?.uid);
+                const isRatingLocked = myRating > 0 && hasCommented;
+
+                return (
+                  <div key={post.id} className="bg-white rounded-3xl shadow-sm border border-gray-200/90 overflow-hidden relative">
+                    
+                    {/* 🥇 랭킹 순위 전용 대형 금빛 헤더 장식 */}
+                    <div className="p-3.5 flex items-center justify-between border-b border-gray-100 bg-slate-50/50">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-sm font-black px-2.5 py-0.5 rounded-xl text-white shadow-sm flex items-center gap-0.5 ${index === 0 ? 'bg-amber-500' : index === 1 ? 'bg-slate-400' : index === 2 ? 'bg-amber-700' : 'bg-gray-800'}`}>
+                          {index === 0 ? '🥇 1위' : index === 1 ? '🥈 2위' : index === 2 ? '🥉 3위' : `${index + 1}위`}
                         </span>
+                        <div className="flex items-center gap-1 max-w-[150px] truncate">
+                          <span className="font-black text-xs text-gray-800">{post.userId === user?.uid ? userProfile.nickname : (post.userName || '지나간 보틀러')}</span>
+                          <span className="text-[9px] text-gray-400 font-medium shrink-0">{formatTimeAgo(post.createdAt)}</span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        {post.verificationStatus === 'ai_verified' && <span className="flex items-center bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-emerald-100"><Icon name="Check" className="w-3 h-3 mr-1" /> AI인증</span>}
+                        {post.verificationStatus === 'community_verified' && <span className="flex items-center bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-blue-100"><Icon name="Users" className="w-3 h-3 mr-1" /> 집단인증</span>}
+                        {post.verificationStatus === 'pending_vote' && <span className="flex items-center bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-amber-100 animate-pulse"><Icon name="Search" className="w-3 h-3 mr-1" /> 인증투표중</span>}
+                      </div>
+                    </div>
+
+                    {/* 중앙 대형 명품 바디 바인딩 */}
+                    <div className="p-4 space-y-4">
+                      <div className="flex gap-4">
+                        {post.thumbnail && (
+                          <div className="w-24 h-24 bg-gray-50 rounded-2xl border flex-shrink-0 relative overflow-hidden shadow-inner cursor-pointer" onClick={() => setSelectedImage(post.thumbnail)}>
+                            <img src={post.thumbnail} className="w-full h-full object-cover" alt="Rank Bottle" />
+                            <div className="absolute top-1 left-1 bg-black/50 text-white rounded w-5 h-5 flex items-center justify-center text-xs">{conf.icon}</div>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-[9px] font-black px-2 py-0.5 rounded mb-1 inline-block uppercase ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>{post.analysisResult?.type || conf.name}</div>
+                          <h3 onClick={() => setSelectedDetailNote(post)} className="font-black text-gray-900 leading-tight mb-1 hover:text-indigo-600 hover:underline cursor-pointer flex items-center gap-1 text-base">{post.analysisResult?.name || '이름 없음'} 📋</h3>
+                          
+                          {/* 실시간 누적 부러움 스코어 바 계측기 리드아웃 */}
+                          <div className="flex flex-col gap-1 mt-2 w-full">
+                            <div className="flex justify-between items-center text-[11px] font-black text-indigo-950">
+                              <span className="flex items-center gap-0.5"><Icon name="Star" className="w-3.5 h-3.5 fill-current text-amber-500" /> 누적 부러움 총점</span>
+                              <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-indigo-700 font-mono">{(post.totalCommunityScore || 0).toFixed(1)} 점</span>
+                            </div>
+                            <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden border border-gray-200/40 shadow-inner">
+                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
+                            </div>
+                            <p className="text-[9px] text-gray-400 font-bold text-right">참여: {Object.keys(post.ratings || {}).length}명 / 평점: {post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length).toFixed(1) : "0.0"}점</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {post.personalNotes && (
+                        <div className="text-sm text-gray-700 bg-gray-50/70 p-3.5 rounded-xl border border-gray-100 font-medium leading-relaxed italic">"{post.personalNotes}"</div>
                       )}
                     </div>
+
+                    {/* 기존에 구현한 🔒 1인 1회 구글인증 가드 투표 박스 그대로 유지 연동 */}
+                    {post.verificationStatus === 'pending_vote' && 
+                     user && !user.isAnonymous && 
+                     (user.providerData && user.providerData.length > 0) &&
+                     post.votes?.voters?.[user?.uid] === undefined && (
+                      <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left animate-in fade-in">
+                        <div className="flex items-start gap-2.5">
+                          <Icon name="Info" className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 직접 수기로 마신 인증인가요?</h4>
+                            <p className="text-[11px] text-amber-900 leading-relaxed mb-3">
+                              AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요!
+                            </p>
+                            <div className="flex gap-2">
+                              <button onClick={() => handleVoteVerification(post.id, 'yes')} className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 shadow-sm active:scale-95">👍 보인다! ({post.votes?.yesCount || 0})</button>
+                              <button onClick={() => handleVoteVerification(post.id, 'no')} className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-rose-50 text-rose-600 border border-gray-200 shadow-sm active:scale-95">👎 안 보인다 ({post.votes?.noCount || 0})</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 기존에 연동해 둔 밸런스 조정형 댓글 및 부러움 드래그 일체형 모듈 통째로 결합 적용 */}
+                    <div className="border-t border-gray-100 bg-gray-50/70 p-4 space-y-3.5">
+                      <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200/60 shadow-sm gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-black text-gray-500 tracking-tight">부러움 점수 평가</p>
+                          <p className="text-[9px] text-indigo-500 font-bold truncate">댓글 작성 시 점수 자동 고정!</p>
+                        </div>
+                        {isRatingLocked ? (
+                          <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[11px] px-2.5 py-1.5 rounded-xl shadow-sm whitespace-nowrap">🔒 평가 완료 ({myRating.toFixed(1)}점)</div>
+                        ) : (
+                          <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; handleRatePost(post.id, post.ratings, calculated); }}>
+                            <FractionalStarRating value={myRating} onChange={(score) => handleRatePost(post.id, post.ratings, score)} />
+                          </div>
+                        )}
+                      </div>
+
+                      <button onClick={() => setOpenComments(p => ({...p, [post.id]: !p[post.id]}))} className="w-full flex items-center justify-between py-2 text-xs font-black text-gray-500 hover:text-indigo-600 transition-colors bg-white px-3 rounded-xl border border-gray-200/60 shadow-sm">
+                        <span className="flex items-center gap-1.5 whitespace-nowrap">💬 댓글 {(post.comments || []).length}개 {openComments[post.id] ? '접기' : '모두 보기'}</span>
+                        <span className="text-[10px] text-gray-400 shrink-0">{openComments[post.id] ? '▲' : '▼'}</span>
+                      </button>
+                      
+                      <div className={`transition-all duration-300 ${openComments[post.id] ? 'block animate-in fade-in slide-in-from-top-1' : 'hidden'}`}>
+                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                          {(post.comments || []).map(c => {
+                            const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
+                            const commenterRating = post.ratings?.[c.userId] || 0;
+                            return (
+                              <div key={c.id} className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-[9px]" title={commenterStats.badge}>{commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}</span>
+                                  <span className="font-extrabold text-gray-800">{c.userId === user?.uid ? userProfile.nickname : (c.userName || '알콜러')}</span>
+                                  {commenterRating > 0 && <span className="text-[10px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
+                                  <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
+                                </div>
+                                <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
+                              </div>
+                            );
+                          })}
+                          {(post.comments || []).length === 0 && <p className="text-[11px] text-gray-400 text-center py-2 font-medium">첫 번째 댓글을 남겨보세요! ✍️</p>}
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-1 border-t border-gray-200/50">
+                        <input type="text" placeholder="댓글을 남기고 점수를 고정하세요!" value={commentInputs[post.id] || ''} onChange={(e) => setCommentInputs(p => ({ ...p, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)} className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
+                        <button onClick={() => handleAddComment(post.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"><Icon name="Send" className="w-3 h-3 ml-0.5"/></button>
+                      </div>
+                    </div>
+
                   </div>
+                );
+              })}
+          </div>
+        )}
 
-                  <div className="shrink-0 ml-2">
-                    {post.verificationStatus === 'ai_verified' && (
-                      <span className="flex items-center bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-emerald-100">
-                        <Icon name="Check" className="w-3 h-3 mr-1" /> AI인증
-                      </span>
-                    )}
-                    {post.verificationStatus === 'community_verified' && (
-                      <span className="flex items-center bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-blue-100">
-                        <Icon name="Users" className="w-3 h-3 mr-1" /> 집단인증
-                      </span>
-                    )}
-                    {post.verificationStatus === 'pending_vote' && (
-                      <span className="flex items-center bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-amber-100 animate-pulse">
-                        <Icon name="Search" className="w-3 h-3 mr-1" /> 인증투표중
-                      </span>
-                    )}
-                  </div>
-               </div>
-
-               <div className="p-4">
-                  <div className="flex gap-4 mb-4"> {post.thumbnail && ( <div className="w-24 h-24 bg-gray-100 rounded-lg border flex-shrink-0 relative overflow-hidden cursor-pointer" onClick={() => setSelectedImage(post.thumbnail)}> <img src={post.thumbnail} className="w-full h-full object-cover" /> <div className="absolute top-1 left-1 bg-black/50 text-white rounded w-6 h-6 flex items-center justify-center text-xs">{conf.icon}</div> </div> )} <div className="flex-1 min-w-0"> <div className={`text-[10px] font-bold px-2 py-0.5 rounded mb-1 inline-block uppercase ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>{post.analysisResult?.type || conf.name}</div> <h3 onClick={() => setSelectedDetailNote(post)} className="font-black text-gray-900 leading-tight mb-1 hover:text-indigo-600 hover:underline cursor-pointer flex items-center gap-1 text-base">{post.analysisResult?.name || '이름 없음'} 📋</h3> <div className="flex items-center text-xs font-black text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-1 rounded-lg w-max shadow-sm mt-1"> <Icon name="Star" className="w-3.5 h-3.5 fill-current text-amber-500 mr-1" /> 평균 부러움: {post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length).toFixed(1) : "0.0"}점 <span className="text-gray-400 font-normal text-[10px] ml-1.5">(총 {(post.totalCommunityScore || 0).toFixed(1)}점 / {Object.keys(post.ratings || {}).length}명)</span> </div> </div> </div>
-
-                  {post.personalNotes && (
-                     <div className="text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 font-medium leading-relaxed italic">"{post.personalNotes}"</div>
-                  )}
-               </div>
-
-               {post.verificationStatus === 'pending_vote' && 
-                user && 
-                !user.isAnonymous && 
-                (user.providerData && user.providerData.length > 0) &&
-                post.votes?.voters?.[user?.uid] === undefined && (
-                 <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left animate-in fade-in duration-300">
-                   <div className="flex items-start gap-2.5">
-                     <Icon name="Info" className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                     <div className="flex-1">
-                       <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 직접 수기로 마신 인증인가요?</h4>
-                       <p className="text-[11px] text-amber-900 leading-relaxed mb-3">
-                         AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요! (구글 회원 1인 1회 참여 가능)
-                       </p>
-                       <div className="flex gap-2">
-                         <button 
-                           onClick={() => handleVoteVerification(post.id, 'yes')}
-                           className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 shadow-sm active:scale-95"
-                         >
-                           👍 보인다! ({post.votes?.yesCount || 0})
-                         </button>
-                         <button 
-                           onClick={() => handleVoteVerification(post.id, 'no')}
-                           className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-rose-50 text-rose-600 border border-gray-200 shadow-sm active:scale-95"
-                         >
-                           👎 안 보인다 ({post.votes?.noCount || 0})
-                         </button>
-                       </div>
-                     </div>
-                   </div>
-                 </div>
-               )}
-
-{/* 밸런스 조정 완료된 단일 통합 평점/댓글 레이아웃 */}
-               <div className="border-t border-gray-100 bg-gray-50/70 p-4 space-y-3.5">
-                 
-                 {/* 1. 부러움 드래그 바 (두 줄 밀림 완전 방지) */}
-                 <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200/60 shadow-sm gap-2">
-                   <div className="min-w-0 flex-1">
-                     <p className="text-[10px] font-black text-gray-500 tracking-tight">부러움 점수 평가</p>
-                     <p className="text-[9px] text-indigo-500 font-bold truncate">댓글 작성 시 점수 자동 고정!</p>
-                   </div>
-                   
-                   {isRatingLocked ? (
-                     <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[11px] px-2.5 py-1.5 rounded-xl shadow-sm whitespace-nowrap">
-                       🔒 평가 완료 ({myRating.toFixed(1)}점)
-                     </div>
-                   ) : (
-                     <div 
-                       className="shrink-0"
-                       onTouchMove={(e) => {
-                         if (!e.touches[0]) return;
-                         const rect = e.currentTarget.getBoundingClientRect();
-                         const x = e.touches[0].clientX - rect.left;
-                         const percent = Math.min(Math.max(x / rect.width, 0), 1);
-                         const calculated = Math.round(percent * 5 * 2) / 2;
-                         handleRatePost(post.id, post.ratings, calculated);
-                       }}
-                     >
-                       <FractionalStarRating 
-                         value={myRating} 
-                         onChange={(score) => handleRatePost(post.id, post.ratings, score)} 
-                       />
-                     </div>
-                   )}
-                 </div>
-
-                 {/* 2. 날씬한 1줄 고정형 아코디언 버튼 */}
-                 <button 
-                   onClick={() => setOpenComments(p => ({...p, [post.id]: !p[post.id]}))} 
-                   className="w-full flex items-center justify-between py-2 text-xs font-black text-gray-500 hover:text-indigo-600 transition-colors bg-white px-3 rounded-xl border border-gray-200/60 shadow-sm"
-                 >
-                   <span className="flex items-center gap-1.5 whitespace-nowrap">💬 댓글 {(post.comments || []).length}개 {openComments[post.id] ? '접기' : '모두 보기'}</span>
-                   <span className="text-[10px] text-gray-400 shrink-0">{openComments[post.id] ? '▲' : '▼'}</span>
-                 </button>
-                 
-                 {/* 3. 아코디언 클릭 시 펼쳐지는 '과거 댓글 리스트' */}
-                 <div className={`transition-all duration-300 ${openComments[post.id] ? 'block animate-in fade-in slide-in-from-top-1' : 'hidden'}`}>
-                   <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                     {(post.comments || []).map(c => {
-                       const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
-                       const commenterRating = post.ratings?.[c.userId] || 0;
-                       return (
-                         <div key={c.id} className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
-                           <div className="flex items-center gap-1.5 flex-wrap">
-                             <span className="text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-[9px]" title={commenterStats.badge}>
-                               {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
-                             </span>
-                             <span className="font-extrabold text-gray-800">{c.userId === user?.uid ? userProfile.nickname : (c.userName || '알콜러')}</span>
-                             {commenterRating > 0 && <span className="text-[10px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
-                             <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
-                           </div>
-                           <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
-                         </div>
-                       );
-                     })}
-                     {(post.comments || []).length === 0 && (
-                       <p className="text-[11px] text-gray-400 text-center py-2 font-medium">첫 번째 댓글을 남겨보세요! ✍️</p>
-                     )}
-                   </div>
-                 </div>
-
-                 {/* 4. 항상 하단에 단일 고정되는 댓글 입력창 */}
-                 <div className="flex gap-2 pt-1 border-t border-gray-200/50">
-                   <input
-                     type="text"
-                     placeholder="댓글을 남기고 점수를 고정하세요!"
-                     value={commentInputs[post.id] || ''}
-                     onChange={(e) => setCommentInputs(p => ({ ...p, [post.id]: e.target.value }))}
-                     onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
-                     className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner"
-                   />
-                   <button 
-                     onClick={() => handleAddComment(post.id)} 
-                     className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"
-                   >
-                     <Icon name="Send" className="w-3 h-3 ml-0.5"/>
-                   </button>
-                 </div>
-
-               </div>
-
-            </div>
-          );
-        })}
       </div>
     );
   };
