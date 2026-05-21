@@ -96,38 +96,10 @@ const LIQUOR_CONFIG = {
 
 const getThemeClasses = (theme) => {
   const map = {
-    rose: { 
-      bg: 'bg-rose-50/70', 
-      text: 'text-rose-900', 
-      border: 'border-rose-100', 
-      btnBg: 'bg-rose-800 hover:bg-rose-900', 
-      gradient: 'from-rose-950 to-indigo-950', 
-      bar: 'bg-rose-800' 
-    },
-    amber: { 
-      bg: 'bg-amber-50/70', 
-      text: 'text-amber-950', 
-      border: 'border-amber-100', 
-      btnBg: 'bg-amber-800 hover:bg-amber-950', 
-      gradient: 'from-amber-950 to-amber-900', 
-      bar: 'bg-amber-800' 
-    },
-    blue: { 
-      bg: 'bg-slate-100/70', 
-      text: 'text-slate-900', 
-      border: 'border-slate-200', 
-      btnBg: 'bg-slate-800 hover:bg-slate-900', 
-      gradient: 'from-slate-900 to-indigo-900', 
-      bar: 'bg-slate-800' 
-    },
-    yellow: { 
-      bg: 'bg-amber-50/40', 
-      text: 'text-yellow-950', 
-      border: 'border-amber-200/50', 
-      btnBg: 'bg-yellow-700 hover:bg-yellow-850', 
-      gradient: 'from-yellow-950 to-amber-950', 
-      bar: 'bg-yellow-600' 
-    }
+    rose: { bg: 'bg-rose-50/70', text: 'text-rose-900', border: 'border-rose-100', btnBg: 'bg-rose-800 hover:bg-rose-900', gradient: 'from-rose-950 to-indigo-950', bar: 'bg-rose-800' },
+    amber: { bg: 'bg-amber-50/70', text: 'text-amber-950', border: 'border-amber-100', btnBg: 'bg-amber-800 hover:bg-amber-950', gradient: 'from-amber-950 to-amber-900', bar: 'bg-amber-800' },
+    blue: { bg: 'bg-slate-100/70', text: 'text-slate-900', border: 'border-slate-200', btnBg: 'bg-slate-800 hover:bg-slate-900', gradient: 'from-slate-900 to-indigo-900', bar: 'bg-slate-800' },
+    yellow: { bg: 'bg-amber-50/40', text: 'text-yellow-950', border: 'border-amber-200/50', btnBg: 'bg-yellow-700 hover:bg-yellow-850', gradient: 'from-yellow-950 to-amber-950', bar: 'bg-yellow-600' }
   };
   return map[theme] || map.rose;
 };
@@ -137,7 +109,7 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
     Camera: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9zM15 13a3 3 0 11-6 0 3 3 0 016 0z" />,
     Menu: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />,
     X: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />,
-    PlusCircle: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 0v2m0-2h2m-2 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    PlusCircle: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 0v2m0-2h2m-2 0H9m12 0a9 9 0 11-18 0a9 9 0 0118 0z" />,
     ChevronDown: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />,
     ChevronUp: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />,
     Award: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />,
@@ -146,8 +118,8 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
     Users: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />,
     Wine: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v10m0 0a4 4 0 11-8 0m8 0a4 4 0 118 0M6 22h12M12 12v10" />,
     Star: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.907c.961 0 1.36 1.246.588 1.81l-3.974 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.97-2.888c-.77-.564-.372-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />,
-    DollarSign: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
-    Info: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />,
+    DollarSign: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0a9 9 0 0118 0z" />,
+    Info: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0a9 9 0 0118 0z" />,
     BookOpen: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />,
     MapPin: (
       <>
@@ -167,7 +139,9 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
     </svg>
   );
 };
+
 const formatTimeAgo = (timestamp) => { if (!timestamp) return ''; const diff = Date.now() - timestamp; const seconds = Math.floor(diff / 1000); if (seconds < 60) return '방금 전'; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes}분 전`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours}시간 전`; const days = Math.floor(hours / 24); if (days < 7) return `${days}일 전`; const date = new Date(timestamp); return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`; };
+
 const compressImage = (base64Str, maxWidth = 400) => {
   return new Promise((resolve) => {
     let img = new Image();
@@ -230,6 +204,7 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
     </div>
   );
 };
+
 export default function TastingApp() {
   const [user, setUser] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -1609,6 +1584,7 @@ export default function TastingApp() {
           </div>
         </div>
       )}
+
       {selectedImage && (
         <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedImage(null)}>
           <button onClick={() => setSelectedImage(null)} className="absolute top-4 right-4 p-2 text-white/70 hover:text-white bg-black/50 rounded-full backdrop-blur-sm transition-colors">
@@ -1623,6 +1599,7 @@ export default function TastingApp() {
           </div>
         </div>
       )}
+
       {/* 📱 [인프라 추가] 라운지 격자 아이템 클릭 시 열리는 인스타형 대형 상세 보기 모달 */}
       {selectedDetailNote && !notes.some(n => n.id === selectedDetailNote.id) && (
         <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedDetailNote(null)}>
@@ -1761,6 +1738,7 @@ export default function TastingApp() {
           </div>
         </div>
       )}
+
     </div>
   );
 }
