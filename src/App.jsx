@@ -1402,7 +1402,9 @@ export default function TastingApp() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm border shadow-2xl space-y-5" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-gray-100 pb-2">
               <h3 className="font-black text-base text-gray-900">👤 내 계정 프로필 관리</h3>
-              <span className="text-[10px] bg-indigo-50 text-indigo-700 font-extrabold px-2 py-0.5 rounded-full">{user?.isAnonymous ? "익명 비회원" : "구글 연동 회원"}</span>
+              <span className="text-[10px] bg-indigo-50 text-indigo-700 font-extrabold px-2 py-0.5 rounded-full">
+                {(user && !user.isAnonymous) || (user?.providerData && user.providerData.length > 0) ? "구글 연동 회원" : "익명 비회원"}
+              </span>
             </div>
             
             <div className="space-y-1.5">
@@ -1421,7 +1423,8 @@ export default function TastingApp() {
               <button onClick={handleUpdateNickname} className="flex-1 bg-gray-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-colors">닉네임 저장</button>
             </div>
 
-            {!user?.isAnonymous && (
+            {/* 🔥 파이어베이스 공급자 데이터 연동 추적으로 100% 로그인 유저 상태일 때만 안전하게 로그아웃 버튼 출력 */}
+            {((user && !user.isAnonymous) || (user?.providerData && user.providerData.length > 0)) && (
               <div className="pt-2 border-t border-gray-100">
                 <button 
                   onClick={handleLogout}
