@@ -1580,7 +1580,7 @@ export default function TastingApp() {
       )}
 
       {/* 술 이름/기록 터치 시 열리는 상세 스펙 카드 모달 */}
-      {selectedDetailNote && (
+      {selectedDetailNote && notes.some(n => n.id === selectedDetailNote.id) && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setSelectedDetailNote(null)}>
           <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto space-y-5 border shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start">
