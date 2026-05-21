@@ -1151,24 +1151,93 @@ export default function TastingApp() {
                  </div>
                )}
 
-               <div className="px-4 py-4 border-t bg-gray-50/50 flex flex-col sm:flex-row justify-between items-center gap-4">
-                   <div className="flex flex-col items-center">
-                      <span className="text-[10px] font-bold text-gray-500 mb-2">이 술의 부러움 점수 평가 (드래그)</span>
-                      {isRatingLocked ? (
-                        <div className="flex flex-col items-center p-1.5 bg-white border rounded-2xl px-5 shadow-sm border-amber-200/60 text-amber-800 font-bold text-xs gap-1">
-                          <span className="flex items-center gap-1">🔒 부러움 평가 완료 ({myRating.toFixed(1)}점)</span>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center gap-2">
-                          <FractionalStarRating value={myRating} onSave={(score) => handleRatePost(post.id, post.ratings, score)} />
-                          <span className="text-[9px] text-gray-400">댓글 작성 시 점수가 고정 및 저장됩니다!</span>
-                        </div>
-                      )}
+<div className="border-t border-gray-100 bg-gray-50/70 p-4 space-y-3">
+                 
+                 {/* 1. 댓글창 바로 위에 찰떡처럼 붙은 부러움 드래그 바 */}
+                 <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200/60 shadow-sm">
+                   <div className="flex flex-col text-left">
+                     <span className="text-[10px] font-black text-gray-400">부러움 점수 드래그</span>
+                     <span className="text-[9px] text-indigo-500 font-medium">댓글 전송 시 이 점수로 자동 박제!</span>
                    </div>
-                   <div className="flex items-center gap-4">
-                   </div>
-               </div>
+                   
+                   {isRatingLocked ? (
+                     <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-xs px-3 py-1.5 rounded-xl flex items-center gap-1 shadow-sm">
+                       🔒 평가 완료 ({myRating.toFixed(1)}점)
+                     </div>
+                   ) : (
+                     <div 
+                       className="flex items-center space-x-2"
+                       onTouchMove={(e) => {
+                         if (!e.touches[0]) return;
+                         const rect = e.currentTarget.getBoundingClientRect();
+                         const x = e.touches[0].clientX - rect.left;
+                         const percent = Math.min(Math.max(x / rect.width, 0), 1);
+                         const calculated = Math.round(percent * 5 * 2) / 2;
+                         handleRatePost(post.id, post.ratings, calculated);
+                       }}
+                     >
+                       <FractionalStarRating 
+                         value={myRating} 
+                         onChange={(score) => handleRatePost(post.id, post.ratings, score)} 
+                       />
+                     </div>
+                   )}
+                 </div>
 
+                 {/* 2. 기존 아코디언 댓글 접기/펴기 버튼 */}
+                 <button 
+                   onClick={() => setOpenComments(p => ({...p, [post.id]: !p[post.id]}))} 
+                   className="w-full flex items-center justify-between py-2 text-xs font-black text-gray-500 hover:text-indigo-600 transition-colors bg-white px-3 rounded-xl border border-gray-200/60 shadow-sm"
+                 >
+                   <span className="flex items-center gap-1.5">💬 댓글 {(post.comments || []).length}개 {openComments[post.id] ? '접기' : '모두 보기'}</span>
+                   <span className="text-[10px] text-gray-400">{openComments[post.id] ? '▲' : '▼'}</span>
+                 </button>
+                 
+                 {/* 3. 댓글 리스트 및 입력창 구역 */}
+                 <div className={`space-y-3 transition-all duration-300 ${openComments[post.id] ? 'block' : 'hidden'}`}>
+                   <div className="space-y-2 mb-2 max-h-[250px] overflow-y-auto pr-1">
+                     {(post.comments || []).map(c => {
+                       const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
+                       const commenterRating = post.ratings?.[c.userId] || 0;
+                       return (
+                         <div key={c.id} className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
+                           <div className="flex items-center gap-1.5 flex-wrap">
+                             <span className="text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-[9px]" title={commenterStats.badge}>
+                               {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
+                             </span>
+                             <span className="font-extrabold text-gray-800">{c.userId === user?.uid ? userProfile.nickname : (c.userName || '알콜러')}</span>
+                             {commenterRating > 0 && <span className="text-[10px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
+                             <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
+                           </div>
+                           <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
+                         </div>
+                       );
+                     })}
+                     {(post.comments || []).length === 0 && (
+                       <p className="text-[11px] text-gray-400 text-center py-2 font-medium">첫 번째 댓글을 남겨보세요! ✍️</p>
+                     )}
+                   </div>
+
+                   <div className="flex gap-2">
+                     <input
+                       type="text"
+                       placeholder="댓글을 남기고 점수를 고정하세요!"
+                       value={commentInputs[post.id] || ''}
+                       onChange={(e) => setCommentInputs(p => ({ ...p, [post.id]: e.target.value }))}
+                       onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
+                       className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner"
+                     />
+                     <button 
+                       onClick={() => handleAddComment(post.id)} 
+                       className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"
+                     >
+                       <Icon name="Send" className="w-3 h-3 ml-0.5"/>
+                     </button>
+                   </div>
+                 </div>
+
+               </div>
+               
                <div className="p-4 border-t border-gray-100 bg-gray-50">
   <button 
     onClick={() => setOpenComments(p => ({...p, [post.id]: !p[post.id]}))} 
