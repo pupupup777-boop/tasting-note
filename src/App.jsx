@@ -770,18 +770,28 @@ export default function TastingApp() {
   };
 
   const handleVoteVerification = async (postId, voteValue) => {
-    if (!user) return;
+    // 🔥 익명 계정이거나 로그인이 안 되어 있으면 투표 권한 자체를 즉시 차단
+    if (!user || user.isAnonymous) {
+      showToast("정식 구글 로그인 회원만 인증 투표에 참여할 수 있습니다.", "error");
+      return;
+    }
+
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
     try {
       const postSnap = communityPosts.find(p => p.id === postId);
       if (!postSnap) return;
 
       const currentVotes = postSnap.votes || { voters: {}, yesCount: 0, noCount: 0 };
-      const previousVote = currentVotes.voters?.[user.uid];
+      const currentVoters = currentVotes.voters || {};
 
-      if (previousVote === voteValue) return;
+      // 🔥 1인 1회 제한: 이미 이 글에 투표한 기록이 있으면 중복 투표 거부
+      if (currentVoters[user.uid] !== undefined) {
+        showToast("이미 이 보틀에 대한 인증 투표를 완료하셨습니다.", "info");
+        return;
+      }
 
-      const updatedVoters = { ...currentVotes.voters, [user.uid]: voteValue };
+      // 내 UID를 이름표로 달고 투표 값 박제
+      const updatedVoters = { ...currentVoters, [user.uid]: voteValue };
       
       let yesCount = 0;
       let noCount = 0;
@@ -793,6 +803,7 @@ export default function TastingApp() {
       const totalVotes = yesCount + noCount;
       let verificationStatus = postSnap.verificationStatus || 'pending_vote';
 
+      // 3명 이상 투표 시 승격 시스템 작동
       if (totalVotes >= 3) {
         const yesRatio = yesCount / totalVotes;
         if (yesRatio >= 0.5) {
@@ -802,19 +813,19 @@ export default function TastingApp() {
         }
       }
 
+      // 서버에 가공된 맵 객체를 덮어쓰기 방식으로 완벽 박제 (새로고침해도 유지됨)
       await updateDoc(postRef, {
-        votes: {
-          voters: updatedVoters,
-          yesCount,
-          noCount
-        },
+        "votes.voters": updatedVoters,
+        "votes.yesCount": yesCount,
+        "votes.noCount": noCount,
         verificationStatus,
         isVerified: verificationStatus === 'community_verified' || verificationStatus === 'ai_verified'
       });
 
-      showToast("인증 투표가 정직하게 집계되었습니다!", "success");
+      showToast("실물 인증 투표가Honest하게 반영되었습니다!", "success");
     } catch (err) {
-      showToast("투표 처리 중 서버 오류가 발생했습니다.", "error");
+      console.error("Vote mapping error:", err);
+      showToast("투표 처리 중 서버 통신 오류가 발생했습니다.", "error");
     }
   };
 
@@ -1189,39 +1200,27 @@ export default function TastingApp() {
                   )}
                </div>
 
-               {post.verificationStatus === 'pending_vote' && post.votes?.voters?.[user?.uid] === undefined && (
-                 <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left">
+               {post.verificationStatus === 'pending_vote' && 
+                user && !user.isAnonymous && 
+                post.votes?.voters?.[user?.uid] === undefined && (
+                 <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left animate-in fade-in duration-300">
                    <div className="flex items-start gap-2.5">
                      <Icon name="Info" className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                      <div className="flex-1">
                        <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 직접 수기로 마신 인증인가요?</h4>
                        <p className="text-[11px] text-amber-900 leading-relaxed mb-3">
-                         AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요! (3명 이상 투표 및 동의율 50% 이상 시 실물인증 승격)
+                         AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요! (구글 회원 1인 1회 참여 가능)
                        </p>
                        <div className="flex gap-2">
                          <button 
                            onClick={() => handleVoteVerification(post.id, 'yes')}
-                           disabled={post.votes?.voters?.[user?.uid] !== undefined}
-                           className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
-                             post.votes?.voters?.[user?.uid] === 'yes'
-                               ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                               : post.votes?.voters?.[user?.uid] !== undefined
-                               ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                               : 'bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 shadow-sm active:scale-95'
-                           }`}
+                           className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 shadow-sm active:scale-95"
                          >
                            👍 보인다! ({post.votes?.yesCount || 0})
                          </button>
                          <button 
                            onClick={() => handleVoteVerification(post.id, 'no')}
-                           disabled={post.votes?.voters?.[user?.uid] !== undefined}
-                           className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all ${
-                             post.votes?.voters?.[user?.uid] === 'no'
-                               ? 'bg-rose-100 text-rose-800 border border-rose-200'
-                               : post.votes?.voters?.[user?.uid] !== undefined
-                               ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                               : 'bg-white hover:bg-rose-50 text-rose-600 border border-gray-200 shadow-sm active:scale-95'
-                           }`}
+                           className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-rose-50 text-rose-600 border border-gray-200 shadow-sm active:scale-95"
                          >
                            👎 안 보인다 ({post.votes?.noCount || 0})
                          </button>
