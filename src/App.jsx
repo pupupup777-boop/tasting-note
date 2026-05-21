@@ -1347,24 +1347,54 @@ export default function TastingApp() {
                       </button>
 
                       <div className={`transition-all duration-300 ${openComments[post.id] ? 'block animate-in fade-in slide-in-from-top-1' : 'hidden'}`}>
-                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
                           {(post.comments || []).map(c => {
                             const commenterRating = post.ratings?.[c.userId] || 0;
-                            // 🔥 작성자의 ID로 실시간 등급 데이터 매칭해오기
                             const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
 
                             return (
-                              <div key={c.id} className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  {/* 👑 이름 왼쪽에 등급 에모지 마크 배치 */}
-                                  <span className="text-xs shrink-0" title={commenterStats.badge}>
-                                    {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
-                                  </span>
-                                  <span className="font-extrabold text-gray-800">{c.userName || '알콜러'}</span>
-                                  {commenterRating > 0 && <span className="text-[10px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
-                                  <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
+                              <div key={c.id} className="space-y-1.5 border-b border-gray-100/50 pb-2 last:border-0">
+                                {/* 댓글 본체 */}
+                                <div className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs shrink-0">{commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}</span>
+                                    <span className="font-extrabold text-gray-800">{c.userName || '알콜러'}</span>
+                                    {commenterRating > 0 && <span className="text-[10px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
+                                    <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
+                                  </div>
+                                  <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
+                                  <div className="text-right">
+                                    <button onClick={() => setActiveReplyBox(activeReplyBox === c.id ? null : c.id)} className="text-[10px] font-bold text-indigo-600 hover:underline mt-1">
+                                      {activeReplyBox === c.id ? '취소' : '↳ 답글 달기'}
+                                    </button>
+                                  </div>
                                 </div>
-                                <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
+
+                                {/* 대댓글 목록 */}
+                                {(c.replies || []).map(r => {
+                                  const replyStats = userStats[r.userId] || { badge: '🥚 알콜 입문자' };
+                                  return (
+                                    <div key={r.id} className="ml-5 text-xs bg-gray-50/80 p-2 rounded-xl border border-dashed border-gray-200 space-y-1 flex gap-1.5 items-start">
+                                      <span className="text-gray-400 text-[11px] mt-0.5 shrink-0">↳</span>
+                                      <div className="flex-1 space-y-0.5">
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          <span className="text-[10px] shrink-0">{replyStats.badge ? replyStats.badge.split(' ')[0] : '🥚'}</span>
+                                          <span className="font-bold text-gray-700">{r.userName || '알콜러'}</span>
+                                          <span className="text-[8px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(r.createdAt)}</span>
+                                        </div>
+                                        <p className="text-gray-600 font-medium pl-0.5">{r.text}</p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+
+                                {/* 대댓글 입력창 */}
+                                {activeReplyBox === c.id && (
+                                  <div className="ml-5 flex gap-1.5 pt-1 animate-in slide-in-from-top-2 duration-200">
+                                    <input type="text" placeholder="답글 내용을 입력하세요..." value={replyInputs[c.id] || ''} onChange={(e) => setReplyInputs(p => ({ ...p, [c.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddReply(post.id, c.id)} className="flex-1 border rounded-xl px-2.5 py-1.5 bg-white text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
+                                    <button onClick={() => handleAddReply(post.id, c.id)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl shrink-0 shadow-sm">등록</button>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -1714,30 +1744,57 @@ export default function TastingApp() {
 
                 <div className="space-y-2">
                   <p className="text-xs font-black text-gray-800 flex items-center gap-1">💬 댓글 채팅 목록 ({selectedDetailNote.comments?.length || 0}개)</p>
-                  <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                  <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
                     {(selectedDetailNote.comments || []).map(c => {
                       const commenterRating = selectedDetailNote.ratings?.[c.userId] || 0;
-                      // 🔥 작성자의 ID로 실시간 등급 데이터 매칭해오기
                       const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
 
                       return (
-                        <div key={c.id} className="text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {/* 👑 이름 왼쪽에 등급 에모지 마크 배치 */}
-                            <span className="text-xs shrink-0" title={commenterStats.badge}>
-                              {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
-                            </span>
-                            <span className="font-extrabold text-gray-800">{c.userName || '알콜러'}</span>
-                            {commenterRating > 0 && <span className="text-[9px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
-                            <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
+                        <div key={c.id} className="space-y-1.5 border-b border-gray-100/50 pb-2 last:border-0">
+                          {/* 댓글 본체 */}
+                          <div className="text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs shrink-0">{commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}</span>
+                              <span className="font-extrabold text-gray-800">{c.userName || '알콜러'}</span>
+                              {commenterRating > 0 && <span className="text-[9px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
+                              <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
+                            </div>
+                            <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
+                            <div className="text-right">
+                              <button onClick={() => setActiveReplyBox(activeReplyBox === c.id ? null : c.id)} className="text-[10px] font-bold text-indigo-600 hover:underline mt-1">
+                                {activeReplyBox === c.id ? '취소' : '↳ 답글 달기'}
+                              </button>
+                            </div>
                           </div>
-                          <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
+
+                          {/* 대댓글 목록 */}
+                          {(c.replies || []).map(r => {
+                            const replyStats = userStats[r.userId] || { badge: '🥚 알콜 입문자' };
+                            return (
+                              <div key={r.id} className="ml-5 text-xs bg-slate-50 p-2 rounded-xl border border-dashed border-gray-200 space-y-1 flex gap-1.5 items-start">
+                                <span className="text-gray-400 text-[11px] mt-0.5 shrink-0">↳</span>
+                                <div className="flex-1 space-y-0.5">
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    <span className="text-[10px] shrink-0">{replyStats.badge ? replyStats.badge.split(' ')[0] : '🥚'}</span>
+                                    <span className="font-bold text-gray-700">{r.userName || '알콜러'}</span>
+                                    <span className="text-[8px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(r.createdAt)}</span>
+                                  </div>
+                                  <p className="text-gray-600 font-medium pl-0.5">{r.text}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {/* 대댓글 입력창 */}
+                          {activeReplyBox === c.id && (
+                            <div className="ml-5 flex gap-1.5 pt-1 animate-in slide-in-from-top-2 duration-200">
+                              <input type="text" placeholder="답글 내용을 입력하세요..." value={replyInputs[c.id] || ''} onChange={(e) => setReplyInputs(p => ({ ...p, [c.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddReply(selectedDetailNote.id, c.id)} className="flex-1 border rounded-xl px-2.5 py-1.5 bg-white text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
+                              <button onClick={() => handleAddReply(selectedDetailNote.id, c.id)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl shrink-0 shadow-sm">등록</button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
-                    {(selectedDetailNote.comments || []).length === 0 && (
-                      <p className="text-[11px] text-gray-400 text-center py-4 font-medium">아직 대화가 없습니다. 첫 한줄평 댓글을 달아보세요! ✍️</p>
-                    )}
                   </div>
                 </div>
 
