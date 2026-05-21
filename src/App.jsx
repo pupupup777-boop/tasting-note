@@ -167,7 +167,7 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
     </svg>
   );
 };
-
+const formatTimeAgo = (timestamp) => { if (!timestamp) return ''; const diff = Date.now() - timestamp; const seconds = Math.floor(diff / 1000); if (seconds < 60) return '방금 전'; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes}분 전`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours}시간 전`; const days = Math.floor(hours / 24); if (days < 7) return `${days}일 전`; const date = new Date(timestamp); return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`; };
 const compressImage = (base64Str, maxWidth = 400) => {
   return new Promise((resolve) => {
     let img = new Image();
@@ -775,11 +775,7 @@ export default function TastingApp() {
     try {
       await updateDoc(postRef, {
         comments: arrayUnion({
-          id: Date.now().toString() + Math.random(),
-          userId: user.uid,
-          userName: userProfile.nickname,
-          text: commentInputs[postId].trim(),
-          createdAt: Date.now()
+          id: Date.now().toString() + Math.random(), userId: user.uid, userName: userProfile.nickname, text: commentInputs[postId].trim(), createdAt: Date.now()
         })
       });
       setCommentInputs(p => ({ ...p, [postId]: '' }));
@@ -1092,7 +1088,7 @@ export default function TastingApp() {
                     </div>
 
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-extrabold text-sm text-gray-900 truncate">{post.userName}</span>
+                      <div className="flex items-center gap-2 min-w-0"><span className="font-extrabold text-sm text-gray-900 truncate">{post.userId === user?.uid ? userProfile.nickname : (post.userName || '지나간 보틀러')}</span><span className="text-[10px] text-gray-400 font-medium shrink-0">{formatTimeAgo(post.createdAt)}</span></div>
                       
                       {myRating > 0 && (
                         <span className="bg-amber-50 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-200 flex items-center shrink-0 shadow-sm animate-in fade-in">
@@ -1201,7 +1197,7 @@ export default function TastingApp() {
                             <span className="text-xs bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200 font-bold text-[10px]" title={commenterStats.badge}>
                               {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
                             </span>
-                            <span className="font-bold text-gray-800">{c.userName}</span>
+                            <span className="font-bold text-gray-800">{c.userId === user?.uid ? userProfile.nickname : (c.userName || '알콜러')}</span><span className="text-[9px] text-gray-400 font-normal ml-1 shrink-0">{formatTimeAgo(c.createdAt)}</span>
                             <span className="text-gray-600 font-medium">{c.text}</span>
                           </div>
                           {commenterRating > 0 && (
