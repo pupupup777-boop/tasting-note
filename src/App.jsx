@@ -269,6 +269,10 @@ export default function TastingApp() {
   const [overallRating, setOverallRating] = useState(0);
   const [expandedAromaCategory, setExpandedAromaCategory] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showNicknameModal, setShowNicknameModal] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState('');
+  const [selectedDetailNote, setSelectedDetailNote] = useState(null);
+  const [showRankModal, setShowRankModal] = useState(false);
 
   // Search Grounding
   const [searchQuery, setSearchQuery] = useState('');
@@ -423,6 +427,19 @@ export default function TastingApp() {
           showToast("구글 인증에 실패했거나 취소되었습니다.", "error");
         }
       };
+      
+  const handleUpdateNickname = async () => {
+    if (!nicknameInput.trim() || !user) return;
+    try {
+      const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
+      await setDoc(profileRef, { nickname: nicknameInput.trim() }, { merge: true });
+      setUserProfile(p => ({ ...p, nickname: nicknameInput.trim() }));
+      setShowNicknameModal(false);
+      showToast("닉네임이 멋지게 변경되었습니다!", "success");
+    } catch (err) {
+      showToast("닉네임 변경 중 오류가 발생했습니다.", "error");
+    }
+  };    
 
   const navigateTo = (view) => {
     setCurrentView(view);
@@ -1036,9 +1053,7 @@ export default function TastingApp() {
       <div className="space-y-6 animate-in fade-in">
         <div className="bg-gradient-to-r from-gray-900 to-black rounded-2xl p-6 text-white shadow-md">
           <h2 className="text-xl font-bold flex items-center mb-2"><Icon name="Users" className="w-6 h-6 mr-2 text-gray-300" /> 보틀 라운지</h2>
-          <div className="bg-white/10 rounded-lg px-3 py-2 text-sm font-medium border border-white/20 inline-block">
-              내 칭호: <span className="text-yellow-400 font-bold">{userStats[user?.uid]?.badge || '🥚 알콜 입문자'}</span>
-          </div>
+          <div onClick={() => setShowRankModal(true)} className="bg-white/10 rounded-lg px-3 py-2 text-sm font-medium border border-white/20 inline-block cursor-pointer hover:bg-white/20 transition-all active:scale-95">내 칭호: <span className="text-yellow-400 font-bold">{userStats[user?.uid]?.badge || '🥚 알콜 입문자'}</span> 🔍</div>
         </div>
 
         <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-gray-100">
@@ -1308,9 +1323,7 @@ export default function TastingApp() {
           <div className="flex items-center space-x-2">
             {user && !user.isAnonymous ? (
               // 로그인 완료 시: 내 닉네임을 상단에 부드럽게 표출
-              <span className="text-xs font-black bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 max-w-[100px] truncate">
-                👤 {userProfile.nickname}
-              </span>
+              <button onClick={() => { setNicknameInput(userProfile.nickname); setShowNicknameModal(true); }} className="text-xs font-black bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 max-w-[100px] truncate hover:bg-indigo-100 transition-colors" title="닉네임 변경하기">👤 {userProfile.nickname} ✏️</button>
             ) : (
               // 미로그인(익명) 상태 시: 즉시 구글 팝업을 실행하는 로그인 버튼 노출
               <button 
