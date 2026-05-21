@@ -390,35 +390,43 @@ export default function TastingApp() {
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   const handleGoogleLogin = async () => {
-        try {
-          showToast("구글 로그인을 시도합니다...", "info");
-          
-          // 1. 진짜 구글 팝업창을 띄우는 파이어베이스 정석 문법 적용
-          const provider = new GoogleAuthProvider();
-          const result = await signInWithPopup(auth, provider);
-          const loggedInUser = result.user;
-          
-          // 2. 로그인 성공 시 내 정보 데이터베이스 동기화
-          const profileRef = doc(db, 'artifacts', appId, 'users', loggedInUser.uid, 'profile', 'info');
-          const finalNickname = loggedInUser.displayName || 'Google유저_' + Math.floor(1000 + Math.random() * 9000);
-          
-          await setDoc(profileRef, { 
-              nickname: finalNickname, 
-              createdAt: Date.now(),
-              provider: 'google'
-          }, { merge: true });
-          
-          setUserProfile(p => ({ ...p, nickname: finalNickname }));
-          setUser(loggedInUser); // 유저 상태 갱신
-          
-          setShowLoginModal(false);
-          showToast(`반갑습니다, ${finalNickname}님! 로그인 성공!`, "success");
-          
-        } catch (error) {
-          console.error("Login error:", error);
-          showToast("구글 인증에 실패했거나 취소되었습니다.", "error");
-        }
-      };
+    try {
+      showToast("구글 로그인을 시도합니다...", "info");
+      
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const loggedInUser = result.user;
+      
+      // 파이어베이스 데이터베이스에서 기존 프로필 정보가 이미 존재하는지 먼저 조회
+      const profileRef = doc(db, 'artifacts', appId, 'users', loggedInUser.uid, 'profile', 'info');
+      const { getDoc } = await import('firebase/firestore'); // 안전한 동적 바인딩 허용
+      const profileSnap = await getDoc(profileRef);
+      
+      let finalNickname = loggedInUser.displayName || 'Google유저_' + Math.floor(1000 + Math.random() * 9000);
+      
+      // 🔥 핵심 조건문: 기존에 수정한 닉네임이 서버에 이미 있다면 구글 이름으로 덮어쓰지 않고 기존 내 닉네임을 그대로 수호합니다!
+      if (profileSnap.exists() && profileSnap.data().nickname) {
+        finalNickname = profileSnap.data().nickname;
+      } else {
+        // 생전 처음 로그인한 유저일 때만 구글 계정 이름으로 최초 등록
+        await setDoc(profileRef, { 
+            nickname: finalNickname, 
+            createdAt: Date.now(),
+            provider: 'google'
+        }, { merge: true });
+      }
+      
+      setUserProfile(p => ({ ...p, nickname: finalNickname }));
+      setUser(loggedInUser);
+      
+      setShowLoginModal(false);
+      showToast(`반갑습니다, ${finalNickname}님! 로그인 성공!`, "success");
+      
+    } catch (error) {
+      console.error("Login error:", error);
+      showToast("구글 인증에 실패했거나 취소되었습니다.", "error");
+    }
+  };
       
   const handleUpdateNickname = async () => {
     if (!nicknameInput.trim() || !user) return;
@@ -431,7 +439,20 @@ export default function TastingApp() {
     } catch (err) {
       showToast("닉네임 변경 중 오류가 발생했습니다.", "error");
     }
-  };    
+  };  
+  
+  const handleLogout = async () => {
+    try {
+      const { signOut } = await import('firebase/auth');
+      await signOut(auth);
+      // 로그아웃 시 다시 안전하게 비회원 익명 세션으로 자동 롤백 연동
+      await signInAnonymously(auth);
+      setShowNicknameModal(false);
+      showToast("안전하게 로그아웃되었습니다.", "info");
+    } catch (err) {
+      showToast("로그아웃 처리 중 오류가 발생했습니다.", "error");
+    }
+  };  
 
   const navigateTo = (view) => {
     setCurrentView(view);
@@ -1378,19 +1399,38 @@ export default function TastingApp() {
       {/* 닉네임 변경 팝업창 모달 */}
       {showNicknameModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowNicknameModal(false)}>
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
-            <h3 className="font-black text-lg text-gray-900">👤 닉네임 변경</h3>
-            <input 
-              type="text" 
-              value={nicknameInput} 
-              onChange={e => setNicknameInput(e.target.value)} 
-              placeholder="새 닉네임을 입력하세요" 
-              className="w-full border rounded-xl px-4 py-3 bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold" 
-            />
-            <div className="flex gap-2">
-              <button onClick={() => setShowNicknameModal(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-2.5 rounded-xl text-sm">취소</button>
-              <button onClick={handleUpdateNickname} className="flex-1 bg-gray-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-sm">저장하기</button>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border shadow-2xl space-y-5" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+              <h3 className="font-black text-base text-gray-900">👤 내 계정 프로필 관리</h3>
+              <span className="text-[10px] bg-indigo-50 text-indigo-700 font-extrabold px-2 py-0.5 rounded-full">{user?.isAnonymous ? "익명 비회원" : "구글 연동 회원"}</span>
             </div>
+            
+            <div className="space-y-1.5">
+              <label className="block text-xs font-black text-gray-400 pl-0.5">닉네임 변경</label>
+              <input 
+                type="text" 
+                value={nicknameInput} 
+                onChange={e => setNicknameInput(e.target.value)} 
+                placeholder="변경할 닉네임을 입력하세요" 
+                className="w-full border rounded-xl px-4 py-3 bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold shadow-inner" 
+              />
+            </div>
+            
+            <div className="flex gap-2">
+              <button onClick={() => setShowNicknameModal(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-2.5 rounded-xl text-xs transition-colors">닫기</button>
+              <button onClick={handleUpdateNickname} className="flex-1 bg-gray-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-colors">닉네임 저장</button>
+            </div>
+
+            {!user?.isAnonymous && (
+              <div className="pt-2 border-t border-gray-100">
+                <button 
+                  onClick={handleLogout}
+                  className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 font-black py-2.5 rounded-xl text-xs border border-rose-200/60 transition-all flex items-center justify-center gap-1 active:scale-95"
+                >
+                  👋 앱에서 로그아웃하기 (익명 전환)
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
