@@ -498,7 +498,19 @@ export default function TastingApp() {
         const payload = {
           contents: [{
             role: "user",
-            parts: [{ text: `"${searchQuery}"에 대한 간략한 역사와 특징, 테이스팅 노트(향과 맛), 그리고 한국의 대표 주류 시세 비교 서비스(데일리샷 등)나 최근 실거래 커뮤니티 시세 가격 정보(날짜/구매처)를 최신 웹 검색 결과에 기반해 정제한 뒤 지정된 JSON 형태로 반환해줘.` }]
+            parts: [{
+              text: `
+              검색 대상 주류: "${searchQuery}"
+              
+              [필수 검색 지침]
+              1. 가격 및 시세 정보를 수집할 때, 최신 웹 검색 결과를 바탕으로 오직 아래 두 군데의 실거래 정보 및 가격 언급을 최우선 기준으로 삼으세요:
+                 - 네이버 카페 '와인싸게사는곳(와쌉)' 유저 구매 후기 및 성지 정보
+                 - 주류 스마트오더 플랫폼 '데일리샷' 가격
+              2. 가격 정보는 맹신할 수 있는 단일 숫자가 아닌, 유저들이 실제로 접근 가능한 '대략적인 가격 범위(예: 150,000원 ~ 175,000원)' 형태로 포맷팅해 주어야 합니다.
+              3. 만약 위 두 개의 출처(와쌉 카페, 데일리샷)에서 해당 주류에 대한 명확한 실거래 언급이나 시세 흔적을 도저히 찾을 수 없다면, 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
+              
+              위 지침에 맞춰 이 술의 역사적 특징, 테이스팅 노트(향과 맛), 그리고 정제된 시세를 지정된 JSON 구조로 반환해줘.
+            ` }]
           }],
           tools: [{ "google_search": {} }],
           generationConfig: {
@@ -506,13 +518,13 @@ export default function TastingApp() {
             responseSchema: {
               type: "OBJECT",
               properties: {
-                "name": { type: "STRING", description: "검색된 정확한 술 한글/영문 이름" },
-                "summary": { type: "STRING", description: "역사와 특징을 1~2줄로 압축한 요약 정보" },
+                "name": { type: "STRING", description: "검색된 정확한 술 한글 및 영문 명칭" },
+                "summary": { type: "STRING", description: "역사와 특징을 1~2줄로 압축한 요약" },
                 "tasting": { type: "STRING", description: "아로마, 팔레트, 피니시 주요 특징" },
-                "avgPrice": { type: "STRING", description: "현재 형성된 평균적인 소매점/스마트오더 가격" },
-                "bargainInfo": { type: "STRING", description: "최근 할인 행사 성지 가격 정보 (예: 26년 2월 이마트 24만원)" }
+                "avgPrice": { type: "STRING", description: "네이버 카페 와쌉 유저 언급 및 데일리샷 기준의 대략적인 평균 가격대 범위 (데이터가 없거나 못 찾으면 반드시 '정보없음'으로 출력)" },
+                "bargainInfo": { type: "STRING", description: "와쌉 성지 매장 행사 혹은 데일리샷 특가 기준의 대략적인 특가 범위 정보 (전혀 알 수 없다면 '정보없음'으로 출력)" }
               },
-              required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
+              required: ["name", "summary", "taining", "avgPrice", "bargainInfo"]
             }
           }
         };
