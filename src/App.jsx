@@ -1031,7 +1031,7 @@ export default function TastingApp() {
          const conf = LIQUOR_CONFIG[note.liquorType] || LIQUOR_CONFIG.wine;
          const theme = getThemeClasses(conf.theme);
          return (
-           <div key={note.id} className="bg-white p-4 rounded-xl shadow-sm border flex gap-4 hover:shadow-md transition-shadow">
+           <div key={note.id} onClick={() => setSelectedDetailNote(note)} className="bg-white p-4 rounded-xl shadow-sm border flex gap-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.99]">
              {note.thumbnail && <img src={note.thumbnail} className="w-20 h-20 bg-gray-100 rounded-lg object-cover" />}
              <div className="flex-1 min-w-0">
                 <div className={`text-[10px] px-2 py-0.5 rounded inline-block font-bold mb-1 uppercase ${theme.bg} ${theme.text}`}>{note.analysisResult?.type}</div>
@@ -1123,25 +1123,14 @@ export default function TastingApp() {
                </div>
 
                <div className="p-4">
-                  <div className="flex gap-4 mb-4">
-                    {post.thumbnail && (
-                      <div className="w-24 h-24 bg-gray-100 rounded-lg border flex-shrink-0 relative overflow-hidden cursor-pointer" onClick={() => setSelectedImage(post.thumbnail)}>
-                        <img src={post.thumbnail} className="w-full h-full object-cover" />
-                        <div className="absolute top-1 left-1 bg-black/50 text-white rounded w-6 h-6 flex items-center justify-center text-xs">{conf.icon}</div>
-                      </div>
-                    )}
-                    <div>
-                       <div className={`text-[10px] font-bold px-2 py-0.5 rounded mb-1 inline-block uppercase ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>{post.analysisResult?.type || conf.name}</div>
-                       <h3 className="font-bold text-gray-900 leading-tight mb-1">{post.analysisResult?.name || '이름 없음'}</h3>
-                    </div>
-                  </div>
+                  <div className="flex gap-4 mb-4"> {post.thumbnail && ( <div className="w-24 h-24 bg-gray-100 rounded-lg border flex-shrink-0 relative overflow-hidden cursor-pointer" onClick={() => setSelectedImage(post.thumbnail)}> <img src={post.thumbnail} className="w-full h-full object-cover" /> <div className="absolute top-1 left-1 bg-black/50 text-white rounded w-6 h-6 flex items-center justify-center text-xs">{conf.icon}</div> </div> )} <div className="flex-1 min-w-0"> <div className={`text-[10px] font-bold px-2 py-0.5 rounded mb-1 inline-block uppercase ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>{post.analysisResult?.type || conf.name}</div> <h3 onClick={() => setSelectedDetailNote(post)} className="font-black text-gray-900 leading-tight mb-1 hover:text-indigo-600 hover:underline cursor-pointer flex items-center gap-1 text-base">{post.analysisResult?.name || '이름 없음'} 📋</h3> <div className="flex items-center text-xs font-black text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-1 rounded-lg w-max shadow-sm mt-1"> <Icon name="Star" className="w-3.5 h-3.5 fill-current text-amber-500 mr-1" /> 평균 부러움: {post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length).toFixed(1) : "0.0"}점 <span className="text-gray-400 font-normal text-[10px] ml-1.5">(총 {(post.totalCommunityScore || 0).toFixed(1)}점 / {Object.keys(post.ratings || {}).length}명)</span> </div> </div> </div>
 
                   {post.personalNotes && (
                      <div className="text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 font-medium leading-relaxed italic">"{post.personalNotes}"</div>
                   )}
                </div>
 
-               {post.verificationStatus === 'pending_vote' && (
+               {post.verificationStatus === 'pending_vote' && post.votes?.voters?.[user?.uid] === undefined && (
                  <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left">
                    <div className="flex items-start gap-2.5">
                      <Icon name="Info" className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
@@ -1198,10 +1187,6 @@ export default function TastingApp() {
                       )}
                    </div>
                    <div className="flex items-center gap-4">
-                       <div className="text-center">
-                         <span className="text-[10px] font-bold text-gray-400">총 부러움</span>
-                         <div className="text-lg font-black text-amber-600 flex items-center"><Icon name="Award" className="w-4 h-4 mr-1"/>{(post.totalCommunityScore || 0).toFixed(1)}</div>
-                       </div>
                    </div>
                </div>
 
@@ -1368,6 +1353,97 @@ export default function TastingApp() {
       </main>
 
       {/* Image modals */}
+      {/* 닉네임 변경 팝업창 모달 */}
+      {showNicknameModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowNicknameModal(false)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+            <h3 className="font-black text-lg text-gray-900">👤 닉네임 변경</h3>
+            <input 
+              type="text" 
+              value={nicknameInput} 
+              onChange={e => setNicknameInput(e.target.value)} 
+              placeholder="새 닉네임을 입력하세요" 
+              className="w-full border rounded-xl px-4 py-3 bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold" 
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowNicknameModal(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-2.5 rounded-xl text-sm">취소</button>
+              <button onClick={handleUpdateNickname} className="flex-1 bg-gray-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-sm">저장하기</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 계급/칭호 기준 안내 표 모달 */}
+      {showRankModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowRankModal(false)}>
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm max-h-[75vh] overflow-y-auto border shadow-2xl space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-black text-lg text-gray-900">👑 명예 칭호 획득 기준</h3>
+              <button onClick={() => setShowRankModal(false)} className="p-1 bg-gray-100 rounded-full text-xs font-bold px-2">닫기</button>
+            </div>
+            <p className="text-xs text-gray-400 border-b pb-2">라운지에 공유한 보틀들이 획득한 '누적 부러움 총점'에 따라 계급이 실시간으로 결정됩니다.</p>
+            <div className="space-y-1.5 text-sm">
+              {[
+                { s: '2000점 이상', n: '🐉 10. 주신(酒神)' },
+                { s: '1000점 이상', n: '🌌 9. 술의 요정' },
+                { s: '500점 이상', n: '👑 8. 주류계의 대부' },
+                { s: '300점 이상', n: '🥃 7. 캐스크 마스터' },
+                { s: '150점 이상', n: '🍷 6. 소믈리에' },
+                { s: '100점 이상', n: '🍸 5. 바텐더' },
+                { s: '60점 이상', n: '🍶 4. 미식가' },
+                { s: '30점 이상', n: '🍺 3. 동네 술꾼' },
+                { s: '10점 이상', n: '🍼 2. 혼술러' },
+                { s: '0점 이상', n: '🥚 1. 알콜 입문자' }
+              ].map(r => (
+                <div key={r.n} className="flex justify-between py-1.5 border-b border-gray-50 last:border-0 font-medium">
+                  <span className="text-gray-800">{r.n}</span>
+                  <span className="text-indigo-600 font-bold text-xs bg-indigo-50 px-2 py-0.5 rounded-full">{r.s}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 술 이름/기록 터치 시 열리는 상세 스펙 카드 모달 */}
+      {selectedDetailNote && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setSelectedDetailNote(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto space-y-5 border shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] bg-indigo-50 text-indigo-800 font-bold px-2 py-0.5 rounded uppercase border border-indigo-100">{selectedDetailNote.analysisResult?.type || '주류'}</span>
+                <h3 className="font-black text-xl text-gray-900 mt-1">{selectedDetailNote.analysisResult?.name}</h3>
+              </div>
+              <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><Icon name="X" className="w-5 h-5 text-gray-500" /></button>
+            </div>
+            
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
+              <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">📊 테이스팅 오각형 밸런스 지표</h4>
+              {selectedDetailNote.ratings && Object.keys(selectedDetailNote.ratings).length > 0 ? (
+                Object.entries(selectedDetailNote.ratings).map(([key, val]) => (
+                  <div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0">
+                    <span className="text-gray-600">{key === 'sweetness' ? '당도' : key === 'acidity' ? '산도' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'peat' ? '피트향' : key === 'spicy' ? '스파이시' : key === 'finish' ? '피니시' : key.toUpperCase()}</span>
+                    <span className="text-indigo-600 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-gray-400 text-center py-2">기록된 세부 슬라이더 지표가 없습니다.</p>
+              )}
+            </div>
+
+            {selectedDetailNote.selectedAromas && selectedDetailNote.selectedAromas.length > 0 && (
+              <div className="space-y-2">
+                <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">🌿 감지된 아로마 & 부케 노트</h4>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedDetailNote.selectedAromas.map(aroma => (
+                    <span key={aroma} className="bg-emerald-50 text-emerald-800 text-xs font-bold px-3 py-1 rounded-full border border-emerald-100"># {aroma}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {selectedImage && (
         <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedImage(null)}>
           <button onClick={() => setSelectedImage(null)} className="absolute top-4 right-4 p-2 text-white/70 hover:text-white bg-black/50 rounded-full backdrop-blur-sm transition-colors">
