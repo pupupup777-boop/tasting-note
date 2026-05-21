@@ -222,7 +222,7 @@ export default function TastingApp() {
   const [commentInputs, setCommentInputs] = useState({});
   const [selectedImage, setSelectedImage] = useState(null);
   
-  // 🔥 인프라 버그 해결용: 라운지 전용 팝업창 모달 분리 변수 추가
+  // 인프라 버그 해결용: 라운지 전용 팝업창 모달 분리 변수 추가
   const [isCommunityModal, setIsCommunityModal] = useState(false); 
 
   // Form State
@@ -345,6 +345,7 @@ export default function TastingApp() {
   }, [communityPosts]);
 
   const showToast = (message, type = 'success') => {
+    toast.show && setToast({ show: false, message: '', type: 'success' });
     setToast({ show: true, message, type });
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
   };
@@ -772,7 +773,6 @@ export default function TastingApp() {
         isVerified: verificationStatus === 'community_verified' || verificationStatus === 'ai_verified'
       });
 
-      // 동기화 싱크 보정
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({
           ...prev,
@@ -781,7 +781,7 @@ export default function TastingApp() {
         }));
       }
 
-      showToast("실물 인증 투표가Honest하게 반영되었습니다!", "success");
+      showToast("실물 인증 투표가 반영되었습니다!", "success");
     } catch (err) {
       console.error("Vote mapping error:", err);
       showToast("투표 처리 중 서버 통신 오류가 발생했습니다.", "error");
@@ -1179,6 +1179,9 @@ export default function TastingApp() {
                 </div>
               );
             })}
+            {displayedPosts.filter(p => communityFilter === 'all' || p.liquorType === communityFilter).length === 0 && (
+              <div className="col-span-2 text-center py-12 bg-white rounded-2xl border text-gray-400 font-medium text-xs">선택한 카테고리에 등록된 보틀이 없습니다.</div>
+            )}
           </div>
         )}
 
@@ -1187,6 +1190,7 @@ export default function TastingApp() {
             {[...communityPosts]
               .sort((a, b) => (b.totalCommunityScore || 0) - (a.totalCommunityScore || 0))
               .map((post, index) => {
+                const rankingAuthorStats = userStats[post.userId] || { badge: '🥚 알콜 입문자', isTop: false, rank: '-' };
                 const myRating = post.ratings?.[user?.uid] || 0;
                 const conf = LIQUOR_CONFIG[post.liquorType] || LIQUOR_CONFIG.wine;
                 const hasCommented = post.comments?.some(c => c.userId === user?.uid);
@@ -1200,7 +1204,10 @@ export default function TastingApp() {
                         <span className={`text-sm font-black px-2.5 py-0.5 rounded-xl text-white shadow-sm flex items-center gap-0.5 ${index === 0 ? 'bg-amber-500' : index === 1 ? 'bg-slate-400' : index === 2 ? 'bg-amber-700' : 'bg-gray-800'}`}>
                           {index === 0 ? '🥇 1위' : index === 1 ? '🥈 2위' : index === 2 ? '🥉 3위' : `${index + 1}위`}
                         </span>
-                        <div className="flex items-center gap-1 max-w-[150px] truncate">
+                        <div className="flex items-center gap-1.5 max-w-[150px] truncate">
+                          <span className="text-base mr-0.5">
+                            {rankingAuthorStats.isTop ? '🏆' : (rankingAuthorStats.badge ? rankingAuthorStats.badge.split(' ')[0] : '🥚')}
+                          </span>
                           <span className="font-black text-xs text-gray-800">{post.userId === user?.uid ? userProfile.nickname : (post.userName || '지나간 보틀러')}</span>
                           <span className="text-[9px] text-gray-400 font-medium shrink-0">{formatTimeAgo(post.createdAt)}</span>
                         </div>
@@ -1231,7 +1238,7 @@ export default function TastingApp() {
                               <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-indigo-700 font-mono">{(post.totalCommunityScore || 0).toFixed(1)} 점</span>
                             </div>
                             <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden border border-gray-200/40 shadow-inner">
-                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
+                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
                             </div>
                             <p className="text-[9px] text-gray-400 font-bold text-right">참여: {Object.keys(post.ratings || {}).length}명 / 평점: {post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length).toFixed(1) : "0.0"}점</p>
                           </div>
@@ -1512,7 +1519,7 @@ export default function TastingApp() {
         </div>
       )}
 
-      {/* 📊 [구조 수정] 순수 개인 노트일 때만 오각형 스펙 모달 활성화 (충돌 완전 차단) */}
+      {/* 📊 순수 개인 노트일 때만 오각형 스펙 모달 활성화 (충돌 완전 차단) */}
       {selectedDetailNote && !isCommunityModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setSelectedDetailNote(null)}>
           <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto space-y-5 border shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -1558,7 +1565,7 @@ export default function TastingApp() {
         </div>
       )}
 
-      {/* 📱 [구조 수정] 라운지 전용 팝업 모달 스위치 연동 (런타임 버그 완전 박멸) */}
+      {/* 📱 라운지 전용 팝업 모달 스위치 연동 (런타임 버그 완전 박멸) */}
       {selectedDetailNote && isCommunityModal && (
         <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedDetailNote(null)}>
           <div className="bg-white rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto space-y-4 border shadow-2xl relative" onClick={e => e.stopPropagation()}>
