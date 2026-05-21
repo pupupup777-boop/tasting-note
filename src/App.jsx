@@ -429,17 +429,62 @@ export default function TastingApp() {
   };
       
   const handleUpdateNickname = async () => {
-    if (!nicknameInput.trim() || !user) return;
+    const nextName = nicknameInput.trim();
+    if (!nextName || !user) return;
     try {
+      // 1. 내 기본 프로필 정보 서버 변경
       const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-      await setDoc(profileRef, { nickname: nicknameInput.trim() }, { merge: true });
-      setUserProfile(p => ({ ...p, nickname: nicknameInput.trim() }));
+      await setDoc(profileRef, { nickname: nextName }, { merge: true });
+      
+      // 2. [인프라 보강] 내가 보틀 라운지에 썼던 모든 글과 댓글의 이름표까지 추적 동기화
+      const publicPostsRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
+      const { getDocs } = await import('firebase/firestore');
+      const querySnap = await getDocs(publicPostsRef);
+      
+      // 서버에서 글 리스트를 돌며 대조 작업 가동
+      for (const postDoc of querySnap.docs) {
+        const postData = postDoc.data();
+        const targetPostRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postDoc.id);
+        let needUpdate = false;
+        const updatePayload = {};
+
+        // 내가 쓴 원문 글 이름표 동기화 판정
+        if (postData.userId === user.uid && postData.userName !== nextName) {
+          updatePayload.userName = nextName;
+          needUpdate = true;
+        }
+
+        // 내가 달았던 과거 댓글 목록 이름표 전수 동기화 판정
+        if (postData.comments && Array.isArray(postData.comments)) {
+          const updatedComments = postData.comments.map(comment => {
+            if (comment.userId === user.uid && comment.userName !== nextName) {
+              return { ...comment, userName: nextName };
+            }
+            return comment;
+          });
+          
+          // 댓글 배열 내용물 중 내 이름이 바뀌었다면 업데이트 페이로드에 적재
+          if (JSON.stringify(postData.comments) !== JSON.stringify(updatedComments)) {
+            updatePayload.comments = updatedComments;
+            needUpdate = true;
+          }
+        }
+
+        // 변동 사항이 잡힌 게시글에 한해 서버 원격 일괄 수정 단발 발사
+        if (needUpdate) {
+          await updateDoc(targetPostRef, updatePayload);
+        }
+      }
+
+      // 3. 리액트 클라이언트 앱 화면 상태 갱신 및 모달 닫기
+      setUserProfile(p => ({ ...p, nickname: nextName }));
       setShowNicknameModal(false);
-      showToast("닉네임이 멋지게 변경되었습니다!", "success");
+      showToast("닉네임과 과거 모든 활동 이름이 동기화되었습니다!", "success");
     } catch (err) {
-      showToast("닉네임 변경 중 오류가 발생했습니다.", "error");
+      console.error("Nickname track sync error:", err);
+      showToast("닉네임 변경 중 네트워크 오류가 발생했습니다.", "error");
     }
-  };  
+  };
   
   const handleLogout = async () => {
     try {
