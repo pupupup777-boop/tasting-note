@@ -179,7 +179,7 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
 
   return (
     <div className="flex items-center space-x-2 bg-white px-3 py-1 rounded-xl border border-gray-100 shadow-sm">
-      <div 
+      <div
         ref={ratingRef}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
@@ -191,9 +191,9 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
           const isHalf = !isFull && displayValue >= star - 0.5;
           return (
             <button key={star} type="button" className="p-0.5 focus:outline-none transition-transform active:scale-110">
-              <Icon 
-                name="Star" 
-                className={`w-5 h-5 ${isFull ? 'text-amber-400 fill-current' : isHalf ? 'text-amber-400 fill-current' : 'text-gray-200'}`} 
+              <Icon
+                name="Star"
+                className={`w-5 h-5 ${isFull ? 'text-amber-400 fill-current' : isHalf ? 'text-amber-400 fill-current' : 'text-gray-200'}`}
                 style={isHalf ? { clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0% 100%)' } : undefined}
               />
             </button>
@@ -221,10 +221,10 @@ export default function TastingApp() {
   const [verificationCode, setVerificationCode] = useState('');
   const [commentInputs, setCommentInputs] = useState({});
   const [selectedImage, setSelectedImage] = useState(null);
-  
+
   // ⚡ [구조 혁신] 리액트 훅의 규칙 엄수: 서브 탭 상태 변수를 최상단 단일 구역으로 전진 배치하여 런타임 프리징 원천 봉쇄
-  const [subTab, setSubTab] = useState('lounge'); 
-  const [isCommunityModal, setIsCommunityModal] = useState(false); 
+  const [subTab, setSubTab] = useState('lounge');
+  const [isCommunityModal, setIsCommunityModal] = useState(false);
 
   // Form State
   const [selectedLiquorType, setSelectedLiquorType] = useState('wine');
@@ -277,13 +277,13 @@ export default function TastingApp() {
     if (!user) return;
     const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
     const q = query(notesRef);
-    
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = [];
       snapshot.forEach((doc) => data.push({ id: doc.id, ...doc.data() }));
       data.sort((a, b) => b.createdAt - a.createdAt);
       setNotes(data);
-      
+
       const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
       onSnapshot(profileRef, (profileSnap) => {
         if (profileSnap.exists()) {
@@ -312,7 +312,7 @@ export default function TastingApp() {
   const userStats = useMemo(() => {
     const stats = {};
     let globalMaxScore = 0;
-    
+
     communityPosts.forEach(post => {
       const score = post.totalCommunityScore || 0;
       if (score > globalMaxScore) globalMaxScore = score;
@@ -378,50 +378,50 @@ export default function TastingApp() {
   const handleGoogleLogin = async () => {
     try {
       showToast("구글 로그인을 시도합니다...", "info");
-      
+
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const loggedInUser = result.user;
-      
+
       const profileRef = doc(db, 'artifacts', appId, 'users', loggedInUser.uid, 'profile', 'info');
       const { getDoc } = await import('firebase/firestore');
       const profileSnap = await getDoc(profileRef);
-      
+
       let finalNickname = loggedInUser.displayName || 'Google유저_' + Math.floor(1000 + Math.random() * 9000);
-      
+
       if (profileSnap.exists() && profileSnap.data().nickname) {
         finalNickname = profileSnap.data().nickname;
       } else {
-        await setDoc(profileRef, { 
-            nickname: finalNickname, 
-            createdAt: Date.now(),
-            provider: 'google'
+        await setDoc(profileRef, {
+          nickname: finalNickname,
+          createdAt: Date.now(),
+          provider: 'google'
         }, { merge: true });
       }
-      
+
       setUserProfile(p => ({ ...p, nickname: finalNickname }));
       setUser(loggedInUser);
-      
+
       setShowLoginModal(false);
       showToast(`반갑습니다, ${finalNickname}님! 로그인 성공!`, "success");
-      
+
     } catch (error) {
       console.error("Login error:", error);
       showToast("구글 인증에 실패했거나 취소되었습니다.", "error");
     }
   };
-      
+
   const handleUpdateNickname = async () => {
     const nextName = nicknameInput.trim();
     if (!nextName || !user) return;
     try {
       const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
       await setDoc(profileRef, { nickname: nextName }, { merge: true });
-      
+
       const publicPostsRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
       const { getDocs } = await import('firebase/firestore');
       const querySnap = await getDocs(publicPostsRef);
-      
+
       for (const postDoc of querySnap.docs) {
         const postData = postDoc.data();
         const targetPostRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postDoc.id);
@@ -440,7 +440,7 @@ export default function TastingApp() {
             }
             return comment;
           });
-          
+
           if (JSON.stringify(postData.comments) !== JSON.stringify(updatedComments)) {
             updatePayload.comments = updatedComments;
             needUpdate = true;
@@ -460,7 +460,7 @@ export default function TastingApp() {
       showToast("닉네임 변경 중 네트워크 오류가 발생했습니다.", "error");
     }
   };
-  
+
   const handleLogout = async () => {
     try {
       setShowNicknameModal(false);
@@ -475,10 +475,10 @@ export default function TastingApp() {
       try {
         const fallbackAnon = await signInAnonymously(auth);
         setUser(fallbackAnon.user);
-      } catch (e) {}
+      } catch (e) { }
       showToast("안전하게 로그아웃되었습니다.", "info");
     }
-  }; 
+  };
 
   const navigateTo = (view) => {
     setCurrentView(view);
@@ -489,19 +489,19 @@ export default function TastingApp() {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
     setSearchResult(null);
-    
+
     const maxRetries = 3;
     let delay = 1500;
 
     for (let i = 0; i < maxRetries; i++) {
       try {
         const payload = {
-          contents: [{ 
-            role: "user", 
-            parts: [{ text: `"${searchQuery}"에 대한 간략한 역사와 특징, 테이스팅 노트(향과 맛), 그리고 한국의 대표 주류 시세 비교 서비스(데일리샷 등)나 최근 실거래 커뮤니티 시세 가격 정보(날짜/구매처)를 최신 웹 검색 결과에 기반해 정제한 뒤 지정된 JSON 형태로 반환해줘.` }] 
+          contents: [{
+            role: "user",
+            parts: [{ text: `"${searchQuery}"에 대한 간략한 역사와 특징, 테이스팅 노트(향과 맛), 그리고 한국의 대표 주류 시세 비교 서비스(데일리샷 등)나 최근 실거래 커뮤니티 시세 가격 정보(날짜/구매처)를 최신 웹 검색 결과에 기반해 정제한 뒤 지정된 JSON 형태로 반환해줘.` }]
           }],
           tools: [{ "google_search": {} }],
-          generationConfig: { 
+          generationConfig: {
             responseMimeType: "application/json",
             responseSchema: {
               type: "OBJECT",
@@ -517,10 +517,10 @@ export default function TastingApp() {
           }
         };
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify(payload) 
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
 
         if (response.status === 503 && i < maxRetries - 1) {
@@ -532,7 +532,7 @@ export default function TastingApp() {
 
         if (!response.ok) throw new Error(`API call failed: ${response.status}`);
         const result = await response.json();
-        
+
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
           setSearchResult(JSON.parse(result.candidates[0].content.parts[0].text));
           break;
@@ -562,11 +562,11 @@ export default function TastingApp() {
     const reader = new FileReader();
     reader.onloadend = async () => {
       const compressed = await compressImage(reader.result, 400);
-      setImage(compressed); 
+      setImage(compressed);
       analyzeLabel(compressed);
     };
     reader.readAsDataURL(file);
-    
+
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -576,7 +576,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     const base64Data = base64Image.split(',')[1];
-    
+
     const config = LIQUOR_CONFIG[selectedLiquorType];
     const prompt = `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
     현재 선택한 주종 카테고리는 '${config.name}'입니다.
@@ -588,11 +588,13 @@ export default function TastingApp() {
     만약 현재 업로드된 보틀이 와인인데 위스키로 잘못 선택된 경우처럼 실제 분석된 종류가 다를 경우, 'detectedCategory' 항목에 알맞은 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 자동으로 추론하여 지정해주세요.`;
 
     const payload = {
-      contents: [{ role: "user", parts: [
-        { text: prompt }, 
-        { inlineData: { mimeType: "image/jpeg", data: base64Data } }
-      ]}],
-      generationConfig: { 
+      contents: [{
+        role: "user", parts: [
+          { text: prompt },
+          { inlineData: { mimeType: "image/jpeg", data: base64Data } }
+        ]
+      }],
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
@@ -616,10 +618,10 @@ export default function TastingApp() {
 
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, { 
-          method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
-          body: JSON.stringify(payload) 
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
         });
 
         if (response.status === 503 && i < maxRetries - 1) {
@@ -631,7 +633,7 @@ export default function TastingApp() {
 
         if (!response.ok) throw new Error(`API call failed: ${response.status}`);
         const result = await response.json();
-        
+
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
           const parsed = JSON.parse(result.candidates[0].content.parts[0].text);
           setAnalysisResult(parsed);
@@ -651,7 +653,7 @@ export default function TastingApp() {
             }
           }
           setIsAnalyzing(false);
-          break; 
+          break;
         } else {
           throw new Error("Empty response parts");
         }
@@ -680,7 +682,7 @@ export default function TastingApp() {
     setIsSaving(true);
     try {
       const smallImage = image ? await compressImage(image, 300) : null;
-      
+
       let verificationStatus = 'ai_verified';
       if (shareToCommunity) {
         verificationStatus = analysisResult.isCodeDetected ? 'ai_verified' : 'pending_vote';
@@ -700,7 +702,7 @@ export default function TastingApp() {
 
       const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
       await addDoc(notesRef, newNote);
-      
+
       if (shareToCommunity) {
         const communityRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
         await addDoc(communityRef, {
@@ -752,7 +754,7 @@ export default function TastingApp() {
       }
 
       const updatedVoters = { ...currentVoters, [user.uid]: voteValue };
-      
+
       let yesCount = 0;
       let noCount = 0;
       Object.values(updatedVoters).forEach(v => {
@@ -768,7 +770,7 @@ export default function TastingApp() {
         if (yesRatio >= 0.5) {
           verificationStatus = 'community_verified';
         } else {
-          verificationStatus = 'pending_vote'; 
+          verificationStatus = 'pending_vote';
         }
       }
 
@@ -803,11 +805,11 @@ export default function TastingApp() {
       updatedRatings[user.uid] = score;
       const totalScore = Object.values(updatedRatings).reduce((acc, curr) => acc + curr, 0);
       await updateDoc(postRef, { ratings: updatedRatings, totalCommunityScore: totalScore });
-      
+
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({ ...prev, ratings: updatedRatings, totalCommunityScore: totalScore }));
       }
-      
+
       showToast(`${score}점을 부여했습니다!`);
     } catch (err) {
       showToast("평가 중 오류가 발생했습니다.", "error");
@@ -822,11 +824,11 @@ export default function TastingApp() {
         id: Date.now().toString() + Math.random(), userId: user.uid, userName: userProfile.nickname, text: commentInputs[postId].trim(), createdAt: Date.now()
       };
       await updateDoc(postRef, { comments: arrayUnion(newComment) });
-      
+
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({ ...prev, comments: [...(prev.comments || []), newComment] }));
       }
-      
+
       setCommentInputs(p => ({ ...p, [postId]: '' }));
     } catch (err) {
       showToast("댓글 작성에 실패했습니다.", "error");
@@ -850,9 +852,8 @@ export default function TastingApp() {
                 <button
                   key={val}
                   onClick={() => setRatings(p => ({ ...p, [criteria.id]: val }))}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                    isActive ? `${theme.bar} text-white shadow-md transform scale-105` : 'bg-gray-100 text-gray-400'
-                  }`}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isActive ? `${theme.bar} text-white shadow-md transform scale-105` : 'bg-gray-100 text-gray-400'
+                    }`}
                 >
                   {val}
                 </button>
@@ -880,9 +881,8 @@ export default function TastingApp() {
                 <button
                   key={liquor.id}
                   onClick={() => { setSelectedLiquorType(liquor.id); resetForm(); }}
-                  className={`snap-center shrink-0 px-5 py-3 rounded-2xl font-bold flex items-center transition-all ${
-                    isSelected ? `${lTheme.btnBg} text-white shadow-md transform scale-105` : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
-                  }`}
+                  className={`snap-center shrink-0 px-5 py-3 rounded-2xl font-bold flex items-center transition-all ${isSelected ? `${lTheme.btnBg} text-white shadow-md transform scale-105` : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+                    }`}
                 >
                   <span className="mr-2 text-xl">{liquor.icon}</span> {liquor.name}
                 </button>
@@ -893,7 +893,7 @@ export default function TastingApp() {
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-          
+
           {!image ? (
             <div onClick={triggerFileInput} className={`border-2 border-dashed ${theme.border} rounded-xl p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors group flex flex-col items-center justify-center h-48 bg-gray-50/50`}>
               <Icon name="Camera" className={`w-12 h-12 ${theme.text} opacity-50 mb-3`} />
@@ -917,16 +917,16 @@ export default function TastingApp() {
           {analysisResult && !isAnalyzing && (
             <div className="mt-6 space-y-4">
               <div className={`bg-gradient-to-br ${theme.gradient} text-white rounded-xl p-5 shadow-md relative overflow-hidden`}>
-                   <div className="relative z-10">
-                   <div className="flex justify-between items-start mb-3">
-                     <h2 className="text-lg font-bold leading-tight pr-2">{analysisResult.name}</h2>
-                     <span className="px-2 py-1 bg-white/20 rounded text-xs font-medium backdrop-blur-sm">{analysisResult.type}</span>
-                   </div>
-                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-white/85">
-                     <div><span className="block text-white/50 text-xs mb-0.5">지역/국가</span><span className="font-medium text-white truncate block">{analysisResult.region || '-'}</span></div>
-                     <div><span className="block text-white/50 text-xs mb-0.5">숙성/빈티지</span><span className="font-medium text-white">{analysisResult.vintage || '-'}</span></div>
-                   </div>
-                 </div>
+                <div className="relative z-10">
+                  <div className="flex justify-between items-start mb-3">
+                    <h2 className="text-lg font-bold leading-tight pr-2">{analysisResult.name}</h2>
+                    <span className="px-2 py-1 bg-white/20 rounded text-xs font-medium backdrop-blur-sm">{analysisResult.type}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-white/85">
+                    <div><span className="block text-white/50 text-xs mb-0.5">지역/국가</span><span className="font-medium text-white truncate block">{analysisResult.region || '-'}</span></div>
+                    <div><span className="block text-white/50 text-xs mb-0.5">숙성/빈티지</span><span className="font-medium text-white">{analysisResult.vintage || '-'}</span></div>
+                  </div>
+                </div>
               </div>
 
               {shareToCommunity && (
@@ -938,7 +938,7 @@ export default function TastingApp() {
                         {analysisResult.isCodeDetected ? "✅ 실물 인증코드 매칭 성공!" : "⚠️ 실물 인증코드 인식 실패"}
                       </h4>
                       <p className="text-[11px] mt-1 leading-relaxed text-gray-700">
-                        {analysisResult.isCodeDetected 
+                        {analysisResult.isCodeDetected
                           ? `사진 속에서 발급한 코드 [${verificationCode}]가 감지되었습니다. 라운지에 인증완료 마크와 함께 안전하게 등록됩니다!`
                           : `코드 [${verificationCode}]를 사진에서 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.`
                         }
@@ -966,23 +966,23 @@ export default function TastingApp() {
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
-                <Icon name="Award" className="w-5 h-5 text-indigo-600"/>보틀 라운지에 실물 인증하여 공유하기
+                <Icon name="Award" className="w-5 h-5 text-indigo-600" />보틀 라운지에 실물 인증하여 공유하기
               </h3>
-              <input 
-                type="checkbox" 
-                checked={shareToCommunity} 
-                onChange={(e) => setShareToCommunity(e.target.checked)} 
-                className="w-5 h-5 rounded border-gray-300 accent-indigo-600" 
+              <input
+                type="checkbox"
+                checked={shareToCommunity}
+                onChange={(e) => setShareToCommunity(e.target.checked)}
+                className="w-5 h-5 rounded border-gray-300 accent-indigo-600"
               />
             </div>
             {shareToCommunity && (
-               <div className="mt-4 p-4 bg-indigo-50 border border-indigo-100 rounded-xl animate-in slide-in-from-top-4">
-                 <p className="text-sm font-bold text-indigo-950">도용방지 실물인증코드 발급</p>
-                 <p className="text-xs text-indigo-800 mt-1 leading-relaxed">
-                   위작 및 도용 방지를 위해 아래 발급된 코드를 종이에 크게 적어 **보틀과 함께 한 컷에 찍어** 촬영해 주세요!
-                 </p>
-                 <p className="text-base font-black text-indigo-700 bg-white mt-3 inline-block px-4 py-1.5 rounded shadow-inner border border-indigo-200 font-mono tracking-widest">{verificationCode}</p>
-               </div>
+              <div className="mt-4 p-4 bg-indigo-50 border border-indigo-100 rounded-xl animate-in slide-in-from-top-4">
+                <p className="text-sm font-bold text-indigo-950">도용방지 실물인증코드 발급</p>
+                <p className="text-xs text-indigo-800 mt-1 leading-relaxed">
+                  위작 및 도용 방지를 위해 아래 발급된 코드를 종이에 크게 적어 **보틀과 함께 한 컷에 찍어** 촬영해 주세요!
+                </p>
+                <p className="text-base font-black text-indigo-700 bg-white mt-3 inline-block px-4 py-1.5 rounded shadow-inner border border-indigo-200 font-mono tracking-widest">{verificationCode}</p>
+              </div>
             )}
           </div>
         )}
@@ -997,7 +997,7 @@ export default function TastingApp() {
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
-               <span className="w-1.5 h-5 bg-emerald-600 rounded-full mr-2"></span> 느껴지는 아로마 & 부케 (Aromas)
+              <span className="w-1.5 h-5 bg-emerald-600 rounded-full mr-2"></span> 느껴지는 아로마 & 부케 (Aromas)
             </h3>
             <p className="text-sm text-gray-400 mb-4">코로 느낀 향들을 모두 골라 담아보세요.</p>
             <div className="space-y-3">
@@ -1028,9 +1028,9 @@ export default function TastingApp() {
           </div>
 
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
-             <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-               <span className="w-1.5 h-5 bg-indigo-600 rounded-full mr-2"></span> 종합 평가 & 오늘의 한줄평
-             </h3>
+            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+              <span className="w-1.5 h-5 bg-indigo-600 rounded-full mr-2"></span> 종합 평가 & 오늘의 한줄평
+            </h3>
             <div className="mb-6 flex flex-col items-center bg-gray-50 py-4 rounded-xl border border-gray-100">
               <label className="block text-sm font-bold text-gray-700 mb-3">전체 만족도 점수</label>
               <div className="flex space-x-2">
@@ -1049,9 +1049,8 @@ export default function TastingApp() {
           </div>
 
           <button onClick={handleSaveNote} disabled={isSaving || !overallRating}
-            className={`w-full font-bold py-4 rounded-xl shadow-md transition-all flex items-center justify-center ${
-              isSaving || !overallRating ? 'bg-gray-300 text-gray-400 cursor-not-allowed' : 'bg-gray-900 hover:bg-black text-white active:scale-95'
-            }`}>
+            className={`w-full font-bold py-4 rounded-xl shadow-md transition-all flex items-center justify-center ${isSaving || !overallRating ? 'bg-gray-300 text-gray-400 cursor-not-allowed' : 'bg-gray-900 hover:bg-black text-white active:scale-95'
+              }`}>
             {isSaving ? <Icon name="Loader2" className="animate-spin w-5 h-5 mr-2" /> : null}
             노트 저장하기
           </button>
@@ -1062,30 +1061,30 @@ export default function TastingApp() {
 
   const renderInsightsView = () => (
     <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center animate-in fade-in">
-       <Icon name="BarChart3" className="w-12 h-12 text-indigo-300 mx-auto mb-3" />
-       <h2 className="text-xl font-bold mb-2">나의 취향 분석</h2>
-       <p className="text-gray-500 text-sm">지금까지 {notes.length}병을 기록하셨습니다!<br/>데이터가 더 쌓이면 선호하는 품종 및 캐스크 선호도를 알려드릴게요.</p>
+      <Icon name="BarChart3" className="w-12 h-12 text-indigo-300 mx-auto mb-3" />
+      <h2 className="text-xl font-bold mb-2">나의 취향 분석</h2>
+      <p className="text-gray-500 text-sm">지금까지 {notes.length}병을 기록하셨습니다!<br />데이터가 더 쌓이면 선호하는 품종 및 캐스크 선호도를 알려드릴게요.</p>
     </div>
   );
 
   const renderListView = () => (
     <div className="space-y-4 animate-in fade-in">
-       <h2 className="text-xl font-bold">내 테이스팅 노트 ({notes.length})</h2>
-       {notes.length === 0 && <div className="text-center p-10 bg-white rounded-2xl border text-gray-400">아직 작성한 보틀이 없습니다.</div>}
-       {notes.map(note => {
-         const conf = LIQUOR_CONFIG[note.liquorType] || LIQUOR_CONFIG.wine;
-         const theme = getThemeClasses(conf.theme);
-         return (
-           <div key={note.id} onClick={() => { setSelectedDetailNote(note); setIsCommunityModal(false); }} className="bg-white p-4 rounded-xl shadow-sm border flex gap-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.99]">
-             {note.thumbnail && <img src={note.thumbnail} className="w-20 h-20 bg-gray-100 rounded-lg object-cover" />}
-             <div className="flex-1 min-w-0">
-                <div className={`text-[10px] px-2 py-0.5 rounded inline-block font-bold mb-1 uppercase ${theme.bg} ${theme.text}`}>{note.analysisResult?.type}</div>
-                <h3 className="font-bold text-sm text-gray-900 truncate">{note.analysisResult?.name}</h3>
-                <div className="flex items-center text-yellow-500 text-xs mt-1.5 font-bold"><Icon name="Star" className="w-3.5 h-3.5 fill-current text-yellow-500 mr-1"/> {note.overallRating}점</div>
-             </div>
-           </div>
-         );
-       })}
+      <h2 className="text-xl font-bold">내 테이스팅 노트 ({notes.length})</h2>
+      {notes.length === 0 && <div className="text-center p-10 bg-white rounded-2xl border text-gray-400">아직 작성한 보틀이 없습니다.</div>}
+      {notes.map(note => {
+        const conf = LIQUOR_CONFIG[note.liquorType] || LIQUOR_CONFIG.wine;
+        const theme = getThemeClasses(conf.theme);
+        return (
+          <div key={note.id} onClick={() => { setSelectedDetailNote(note); setIsCommunityModal(false); }} className="bg-white p-4 rounded-xl shadow-sm border flex gap-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.99]">
+            {note.thumbnail && <img src={note.thumbnail} className="w-20 h-20 bg-gray-100 rounded-lg object-cover" />}
+            <div className="flex-1 min-w-0">
+              <div className={`text-[10px] px-2 py-0.5 rounded inline-block font-bold mb-1 uppercase ${theme.bg} ${theme.text}`}>{note.analysisResult?.type}</div>
+              <h3 className="font-bold text-sm text-gray-900 truncate">{note.analysisResult?.name}</h3>
+              <div className="flex items-center text-yellow-500 text-xs mt-1.5 font-bold"><Icon name="Star" className="w-3.5 h-3.5 fill-current text-yellow-500 mr-1" /> {note.overallRating}점</div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 
@@ -1096,7 +1095,7 @@ export default function TastingApp() {
 
     return (
       <div className="space-y-4 animate-in fade-in duration-300">
-        
+
         <div className="bg-gradient-to-r from-gray-900 via-slate-900 to-black rounded-2xl p-5 text-white shadow-xl relative overflow-hidden">
           <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none transform rotate-12">
             <Icon name="Users" className="w-40 h-40" />
@@ -1113,13 +1112,13 @@ export default function TastingApp() {
 
         {/* 🎛️ 하이엔드 서브 슬라이딩 탭바 */}
         <div className="flex bg-gray-200/70 p-1 rounded-xl border border-gray-300/30">
-          <button 
+          <button
             onClick={() => setSubTab('lounge')}
             className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${subTab === 'lounge' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
             💬 보틀 라운지 <span className="text-[10px] font-medium opacity-60">({displayedPosts.length})</span>
           </button>
-          <button 
+          <button
             onClick={() => setSubTab('ranking')}
             className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${subTab === 'ranking' ? 'bg-white text-indigo-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
           >
@@ -1149,15 +1148,15 @@ export default function TastingApp() {
               const avgScore = post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length) : 0;
 
               return (
-                <div key={post.id} onClick={() => { setSelectedDetailNote(post); setIsCommunityModal(true); setOpenComments(p => ({...p, [post.id]: true})); }} className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm flex flex-col hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group relative">
-                  
+                <div key={post.id} onClick={() => { setSelectedDetailNote(post); setIsCommunityModal(true); setOpenComments(p => ({ ...p, [post.id]: true })); }} className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm flex flex-col hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group relative">
+
                   <div className="aspect-square bg-gray-50 relative overflow-hidden border-b border-gray-100 shrink-0">
                     {post.thumbnail ? (
                       <img src={post.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="Bottle" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-4xl bg-slate-50">{conf.icon}</div>
                     )}
-                    
+
                     <span className={`absolute top-2 left-2 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm z-10 ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>
                       {post.analysisResult?.type || conf.name}
                     </span>
@@ -1204,7 +1203,7 @@ export default function TastingApp() {
 
                 return (
                   <div key={post.id} className="bg-white rounded-3xl shadow-sm border border-gray-200/90 overflow-hidden relative">
-                    
+
                     <div className="p-3.5 flex items-center justify-between border-b border-gray-100 bg-slate-50/50">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm font-black px-2.5 py-0.5 rounded-xl text-white shadow-sm flex items-center gap-0.5 ${index === 0 ? 'bg-amber-500' : index === 1 ? 'bg-slate-400' : index === 2 ? 'bg-amber-700' : 'bg-gray-800'}`}>
@@ -1237,7 +1236,7 @@ export default function TastingApp() {
                         <div className="flex-1 min-w-0">
                           <div className={`text-[9px] font-black px-2 py-0.5 rounded mb-1 inline-block uppercase ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>{post.analysisResult?.type || conf.name}</div>
                           <h3 onClick={() => { setSelectedDetailNote(post); setIsCommunityModal(true); }} className="font-black text-gray-900 leading-tight mb-1 hover:text-indigo-600 hover:underline cursor-pointer flex items-center gap-1 text-base">{post.analysisResult?.name || '이름 없음'} 📋</h3>
-                          
+
                           <div className="flex flex-col gap-1 mt-2 w-full">
                             <div className="flex justify-between items-center text-[11px] font-black text-indigo-950">
                               <span className="flex items-center gap-0.5"><Icon name="Star" className="w-3.5 h-3.5 fill-current text-amber-500" /> 누적 부러움 총점</span>
@@ -1256,26 +1255,26 @@ export default function TastingApp() {
                       )}
                     </div>
 
-                    {post.verificationStatus === 'pending_vote' && 
-                     user && !user.isAnonymous && 
-                     (user.providerData && user.providerData.length > 0) &&
-                     post.votes?.voters?.[user?.uid] === undefined && (
-                      <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left">
-                        <div className="flex items-start gap-2.5">
-                          <Icon name="Info" className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                          <div className="flex-1">
-                            <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 직접 수기로 마신 인증인가요?</h4>
-                            <p className="text-[11px] text-amber-900 leading-relaxed mb-3">
-                              AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요!
-                            </p>
-                            <div className="flex gap-2">
-                              <button onClick={() => handleVoteVerification(post.id, 'yes')} className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 shadow-sm active:scale-95">👍 보인다! ({post.votes?.yesCount || 0})</button>
-                              <button onClick={() => handleVoteVerification(post.id, 'no')} className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-rose-50 text-rose-600 border border-gray-200 shadow-sm active:scale-95">👎 안 보인다 ({post.votes?.noCount || 0})</button>
+                    {post.verificationStatus === 'pending_vote' &&
+                      user && !user.isAnonymous &&
+                      (user.providerData && user.providerData.length > 0) &&
+                      post.votes?.voters?.[user?.uid] === undefined && (
+                        <div className="mx-4 mb-4 p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left">
+                          <div className="flex items-start gap-2.5">
+                            <Icon name="Info" className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                              <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 직접 수기로 마신 인증인가요?</h4>
+                              <p className="text-[11px] text-amber-900 leading-relaxed mb-3">
+                                AI가 사진에서 코드를 찾지 못했습니다. 사진 확대 시 쪽지에 적힌 <b className="bg-white px-1.5 py-0.5 rounded border border-amber-300 font-mono text-[11px]">{post.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요!
+                              </p>
+                              <div className="flex gap-2">
+                                <button onClick={() => handleVoteVerification(post.id, 'yes')} className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-emerald-50 text-emerald-700 border border-gray-200 shadow-sm active:scale-95">👍 보인다! ({post.votes?.yesCount || 0})</button>
+                                <button onClick={() => handleVoteVerification(post.id, 'no')} className="flex-1 py-1.5 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-all bg-white hover:bg-rose-50 text-rose-600 border border-gray-200 shadow-sm active:scale-95">👎 안 보인다 ({post.votes?.noCount || 0})</button>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     <div className="border-t border-gray-100 bg-gray-50/70 p-4 space-y-3.5">
                       <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200/60 shadow-sm gap-2">
@@ -1292,18 +1291,25 @@ export default function TastingApp() {
                         )}
                       </div>
 
-                      <button onClick={() => setOpenComments(p => ({...p, [post.id]: !p[post.id]}))} className="w-full flex items-center justify-between py-2 text-xs font-black text-gray-500 hover:text-indigo-600 transition-colors bg-white px-3 rounded-xl border border-gray-200/60 shadow-sm">
+                      <button onClick={() => setOpenComments(p => ({ ...p, [post.id]: !p[post.id] }))} className="w-full flex items-center justify-between py-2 text-xs font-black text-gray-500 hover:text-indigo-600 transition-colors bg-white px-3 rounded-xl border border-gray-200/60 shadow-sm">
                         <span className="flex items-center gap-1.5 whitespace-nowrap">💬 댓글 {(post.comments || []).length}개 {openComments[post.id] ? '접기' : '모두 보기'}</span>
                         <span className="text-[10px] text-gray-400 shrink-0">{openComments[post.id] ? '▲' : '▼'}</span>
                       </button>
-                      
+
                       <div className={`transition-all duration-300 ${openComments[post.id] ? 'block animate-in fade-in slide-in-from-top-1' : 'hidden'}`}>
                         <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
                           {(post.comments || []).map(c => {
                             const commenterRating = post.ratings?.[c.userId] || 0;
+                            // 🔥 작성자의 ID로 실시간 등급 데이터 매칭해오기
+                            const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
+
                             return (
                               <div key={c.id} className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
+                                  {/* 👑 이름 왼쪽에 등급 에모지 마크 배치 */}
+                                  <span className="text-xs shrink-0" title={commenterStats.badge}>
+                                    {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
+                                  </span>
                                   <span className="font-extrabold text-gray-800">{c.userName || '알콜러'}</span>
                                   {commenterRating > 0 && <span className="text-[10px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
                                   <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
@@ -1317,7 +1323,7 @@ export default function TastingApp() {
 
                       <div className="flex gap-2 pt-1 border-t border-gray-200/50">
                         <input type="text" placeholder="댓글을 남기고 점수를 고정하세요!" value={commentInputs[post.id] || ''} onChange={(e) => setCommentInputs(p => ({ ...p, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)} className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
-                        <button onClick={() => handleAddComment(post.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"><Icon name="Send" className="w-3 h-3 ml-0.5"/></button>
+                        <button onClick={() => handleAddComment(post.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"><Icon name="Send" className="w-3 h-3 ml-0.5" /></button>
                       </div>
                     </div>
 
@@ -1339,20 +1345,20 @@ export default function TastingApp() {
             <Icon name="Search" className="w-6 h-6 mr-2 text-blue-300" /> 보틀 백과 & 시세 검색
           </h2>
           <p className="text-sm text-indigo-100 opacity-90 leading-relaxed">
-            궁금한 보틀 이름을 검색해보세요.<br/>AI가 최신 웹 검색을 통해 역사, 테이스팅 노트, 그리고 최근 시세(성지 가격)를 간략히 요약해 드립니다.
+            궁금한 보틀 이름을 검색해보세요.<br />AI가 최신 웹 검색을 통해 역사, 테이스팅 노트, 그리고 최근 시세(성지 가격)를 간략히 요약해 드립니다.
           </p>
         </div>
 
         <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-200">
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSearchLiquor()}
-            placeholder="예: 조니워커 블루라벨, 맥캘란 12년 쉐리" 
+            placeholder="예: 조니워커 블루라벨, 맥캘란 12년 쉐리"
             className="flex-1 bg-transparent px-3 py-2 outline-none text-gray-800 placeholder-gray-400"
           />
-          <button 
+          <button
             onClick={handleSearchLiquor}
             disabled={isSearching || !searchQuery.trim()}
             className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition-colors disabled:opacity-50"
@@ -1367,13 +1373,13 @@ export default function TastingApp() {
               <h3 className="font-black text-lg text-gray-900">{searchResult.name}</h3>
               <div className="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-1 rounded">AI 요약</div>
             </div>
-            
+
             <div className="p-5 space-y-5">
               <div>
                 <h4 className="flex items-center text-sm font-bold text-gray-800 mb-1.5"><Icon name="BookOpen" className="w-4 h-4 mr-1.5 text-gray-500" /> 역사 및 특징</h4>
                 <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-xl">{searchResult.summary}</p>
               </div>
-              
+
               <div>
                 <h4 className="flex items-center text-sm font-bold text-gray-800 mb-1.5"><Icon name="Wine" className="w-4 h-4 mr-1.5 text-rose-500" /> 테이스팅 노트</h4>
                 <p className="text-sm text-gray-600 leading-relaxed bg-rose-50/50 p-3 rounded-xl border border-rose-100">{searchResult.tasting}</p>
@@ -1384,7 +1390,7 @@ export default function TastingApp() {
                   <h4 className="flex items-center text-xs font-bold text-blue-800 mb-1"><Icon name="DollarSign" className="w-4 h-4 mr-1" /> 시중 평균 시세</h4>
                   <p className="text-sm font-medium text-gray-800">{searchResult.avgPrice}</p>
                 </div>
-                
+
                 <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
                   <h4 className="flex items-center text-xs font-bold text-amber-800 mb-1"><Icon name="MapPin" className="w-4 h-4 mr-1" /> 최근 성지/할인 정보</h4>
                   <p className="text-sm font-medium text-gray-800">{searchResult.bargainInfo}</p>
@@ -1410,19 +1416,19 @@ export default function TastingApp() {
             <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 hover:text-black transition-colors"><Icon name="Menu" className="w-6 h-6" /></button>
             <h1 className="text-lg font-black ml-2 tracking-tight">TastingNote</h1>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             {user && !user.isAnonymous ? (
               <button onClick={() => { setNicknameInput(userProfile.nickname); setShowNicknameModal(true); }} className="text-xs font-black bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 max-w-[100px] truncate hover:bg-indigo-100 transition-colors">👤 {userProfile.nickname} ✏️</button>
             ) : (
-              <button 
-                onClick={handleGoogleLogin} 
+              <button
+                onClick={handleGoogleLogin}
                 className="text-xs font-bold text-gray-600 hover:text-black bg-gray-50 border border-gray-200 hover:bg-gray-100 px-2.5 py-1.5 rounded-full transition-all"
               >
                 로그인
               </button>
             )}
-            
+
             <button onClick={() => navigateTo('add')} className="text-sm font-bold bg-gray-900 hover:bg-black text-white px-3 py-1.5 rounded-full flex items-center shadow-sm transition-colors">
               <Icon name="PlusCircle" className="w-4 h-4 mr-1" /> 새 리뷰
             </button>
@@ -1464,18 +1470,18 @@ export default function TastingApp() {
                 {(user && !user.isAnonymous) || (user?.providerData && user.providerData.length > 0) ? "구글 연동 회원" : "익명 비회원"}
               </span>
             </div>
-            
+
             <div className="space-y-1.5">
               <label className="block text-xs font-black text-gray-400 pl-0.5">닉네임 변경</label>
-              <input 
-                type="text" 
-                value={nicknameInput} 
-                onChange={e => setNicknameInput(e.target.value)} 
-                placeholder="변경할 닉네임을 입력하세요" 
-                className="w-full border rounded-xl px-4 py-3 bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold shadow-inner" 
+              <input
+                type="text"
+                value={nicknameInput}
+                onChange={e => setNicknameInput(e.target.value)}
+                placeholder="변경할 닉네임을 입력하세요"
+                className="w-full border rounded-xl px-4 py-3 bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold shadow-inner"
               />
             </div>
-            
+
             <div className="flex gap-2">
               <button onClick={() => setShowNicknameModal(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-2.5 rounded-xl text-xs transition-colors">닫기</button>
               <button onClick={handleUpdateNickname} className="flex-1 bg-gray-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-colors">닉네임 저장</button>
@@ -1483,7 +1489,7 @@ export default function TastingApp() {
 
             {((user && !user.isAnonymous) || (user?.providerData && user.providerData.length > 0)) && (
               <div className="pt-2 border-t border-gray-100">
-                <button 
+                <button
                   onClick={handleLogout}
                   className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 font-black py-2.5 rounded-xl text-xs border border-rose-200/60 transition-all flex items-center justify-center gap-1 active:scale-95"
                 >
@@ -1536,10 +1542,10 @@ export default function TastingApp() {
               </div>
               <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><Icon name="X" className="w-5 h-5 text-gray-500" /></button>
             </div>
-            
+
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
               <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">📊 테이스팅 오각형 밸런스 지표</h4>
-              {selectedDetailNote.originalRatings || selectedDetailNote.ratings ? Object.entries(selectedDetailNote.originalRatings || selectedDetailNote.ratings).map(([key, val]) => { if (typeof val === 'object' || !['sweetness','acidity','tannin','body','peat','spicy','finish'].includes(key)) return null; return ( <div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0"> <span className="text-gray-600">{key === 'sweetness' ? '당도' : key === 'acidity' ? '산도' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'peat' ? '피트향' : key === 'spicy' ? '스파이시' : key === 'finish' ? '피니시' : key.toUpperCase()}</span> <span className="text-indigo-600 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span> </div> ); }) : <p className="text-xs text-gray-400 text-center py-2">기록된 세부 슬라이더 지표가 없습니다.</p>}
+              {selectedDetailNote.originalRatings || selectedDetailNote.ratings ? Object.entries(selectedDetailNote.originalRatings || selectedDetailNote.ratings).map(([key, val]) => { if (typeof val === 'object' || !['sweetness', 'acidity', 'tannin', 'body', 'peat', 'spicy', 'finish'].includes(key)) return null; return (<div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0"> <span className="text-gray-600">{key === 'sweetness' ? '당도' : key === 'acidity' ? '산도' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'peat' ? '피트향' : key === 'spicy' ? '스파이시' : key === 'finish' ? '피니시' : key.toUpperCase()}</span> <span className="text-indigo-600 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span> </div>); }) : <p className="text-xs text-gray-400 text-center py-2">기록된 세부 슬라이더 지표가 없습니다.</p>}
             </div>
 
             {selectedDetailNote.selectedAromas && selectedDetailNote.selectedAromas.length > 0 && (
@@ -1574,7 +1580,7 @@ export default function TastingApp() {
       {selectedDetailNote && isCommunityModal && (
         <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedDetailNote(null)}>
           <div className="bg-white rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto space-y-4 border shadow-2xl relative" onClick={e => e.stopPropagation()}>
-            
+
             <div className="p-4 border-b flex justify-between items-center bg-gray-50/50 sticky top-0 z-10 backdrop-blur-sm">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-black text-gray-400">보틀 라운지 상세보기</span>
@@ -1585,7 +1591,7 @@ export default function TastingApp() {
             </div>
 
             <div className="p-4 space-y-4">
-              
+
               <div className="w-full aspect-video bg-gray-50 rounded-2xl overflow-hidden border relative shadow-inner">
                 {selectedDetailNote.thumbnail ? (
                   <img src={selectedDetailNote.thumbnail} className="w-full h-full object-cover" alt="Detail Bottle" />
@@ -1624,21 +1630,21 @@ export default function TastingApp() {
                 </div>
               )}
 
-              {selectedDetailNote.verificationStatus === 'pending_vote' && 
-               user && !user.isAnonymous && 
-               (user.providerData && user.providerData.length > 0) &&
-               selectedDetailNote.votes?.voters?.[user?.uid] === undefined && (
-                <div className="p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left">
-                  <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 실물 인증인가요?</h4>
-                  <p className="text-[10px] text-amber-900 leading-relaxed mb-3">
-                    쪽지에 적힌 <b>{selectedDetailNote.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요!
-                  </p>
-                  <div className="flex gap-2">
-                    <button onClick={() => handleVoteVerification(selectedDetailNote.id, 'yes')} className="flex-1 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 font-bold border rounded-xl text-xs shadow-sm">👍 보인다!</button>
-                    <button onClick={() => handleVoteVerification(selectedDetailNote.id, 'no')} className="flex-1 py-1.5 bg-white hover:bg-rose-50 text-rose-600 font-bold border rounded-xl text-xs shadow-sm">👎 안 보인다</button>
+              {selectedDetailNote.verificationStatus === 'pending_vote' &&
+                user && !user.isAnonymous &&
+                (user.providerData && user.providerData.length > 0) &&
+                selectedDetailNote.votes?.voters?.[user?.uid] === undefined && (
+                  <div className="p-4 bg-amber-50/60 border border-amber-200/50 rounded-2xl text-left">
+                    <h4 className="text-xs font-black text-amber-950 mb-1">🙋‍♂️ 이 보틀, 실물 인증인가요?</h4>
+                    <p className="text-[10px] text-amber-900 leading-relaxed mb-3">
+                      쪽지에 적힌 <b>{selectedDetailNote.verificationCodeUsed}</b> 코드가 보이신다면 투표해 주세요!
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleVoteVerification(selectedDetailNote.id, 'yes')} className="flex-1 py-1.5 bg-white hover:bg-emerald-50 text-emerald-700 font-bold border rounded-xl text-xs shadow-sm">👍 보인다!</button>
+                      <button onClick={() => handleVoteVerification(selectedDetailNote.id, 'no')} className="flex-1 py-1.5 bg-white hover:bg-rose-50 text-rose-600 font-bold border rounded-xl text-xs shadow-sm">👎 안 보인다</button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               <div className="border-t border-gray-100 pt-3 space-y-3.5">
                 <div className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-xl border border-gray-200/60 shadow-inner gap-2">
@@ -1661,9 +1667,16 @@ export default function TastingApp() {
                   <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                     {(selectedDetailNote.comments || []).map(c => {
                       const commenterRating = selectedDetailNote.ratings?.[c.userId] || 0;
+                      // 🔥 작성자의 ID로 실시간 등급 데이터 매칭해오기
+                      const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
+
                       return (
                         <div key={c.id} className="text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
+                            {/* 👑 이름 왼쪽에 등급 에모지 마크 배치 */}
+                            <span className="text-xs shrink-0" title={commenterStats.badge}>
+                              {commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}
+                            </span>
                             <span className="font-extrabold text-gray-800">{c.userName || '알콜러'}</span>
                             {commenterRating > 0 && <span className="text-[9px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
                             <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
@@ -1679,16 +1692,16 @@ export default function TastingApp() {
                 </div>
 
                 <div className="flex gap-2 pt-1 border-t border-gray-100">
-                  <input 
-                    type="text" 
-                    placeholder="매너 있는 댓글 한마디를 남겨보세요!" 
-                    value={commentInputs[selectedDetailNote.id] || ''} 
-                    onChange={(e) => setCommentInputs(p => ({ ...p, [selectedDetailNote.id]: e.target.value }))} 
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddComment(selectedDetailNote.id)} 
-                    className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" 
+                  <input
+                    type="text"
+                    placeholder="매너 있는 댓글 한마디를 남겨보세요!"
+                    value={commentInputs[selectedDetailNote.id] || ''}
+                    onChange={(e) => setCommentInputs(p => ({ ...p, [selectedDetailNote.id]: e.target.value }))}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddComment(selectedDetailNote.id)}
+                    className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner"
                   />
                   <button onClick={() => handleAddComment(selectedDetailNote.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md">
-                    <Icon name="Send" className="w-3 h-3 ml-0.5"/>
+                    <Icon name="Send" className="w-3 h-3 ml-0.5" />
                   </button>
                 </div>
               </div>
