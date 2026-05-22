@@ -516,14 +516,14 @@ export default function TastingApp() {
 
     let correctedName = searchQuery;
 
-    // [1단계] 초고속 오타 교정 및 기본 정보 가져오기
+    // [1단계] 초고속 오타 교정 및 기본 백과 정보 가져오기
     try {
       const basicPayload = {
         contents: [{
           role: "user",
           parts: [{
             text: `"${searchQuery}" 술의 한글/영문 공식 명칭, 역사와 특징 요약(1~2줄), 그리고 주요 테이스팅 노트(아로마, 팔레트, 피니시)를 아래 지정된 JSON 규격으로 알려줘. 
-            중요: 키보드 오타 혹은 변환오타(예: qkfqpsl12년 -> 발베니 12년)가 있는 경우에도 반드시 가장 유력한 정상 한글 술 이름으로 복원해서 "name" 필드에 채워주세요. 다른 설명 없이 오직 JSON만 반환해야 해.
+            중요: 키보드 오타 혹은 한영 변환 오타(예: qkfqpsl12년 -> 발베니 12년)가 있는 경우에도 반드시 가장 유력한 정상 한글 술 이름으로 완벽히 복원해서 "name" 필드에 채워주세요. 다른 설명 없이 오직 JSON만 반환해야 해.
             {
               "name": "술 공식 명칭",
               "summary": "역사 및 특징 요약",
@@ -531,9 +531,7 @@ export default function TastingApp() {
             }`
           }]
         }],
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
+        generationConfig: { responseMimeType: "application/json" }
       };
 
       const basicResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
@@ -546,10 +544,8 @@ export default function TastingApp() {
         const basicResult = await basicResponse.json();
         if (basicResult.candidates?.[0]?.content?.parts?.[0]?.text) {
           const parsedBasic = safeParseJSON(basicResult.candidates[0].content.parts[0].text);
-          if (parsedBasic) {
-            if (parsedBasic.name) {
-              correctedName = parsedBasic.name;
-            }
+          if (parsedBasic && parsedBasic.name) {
+            correctedName = parsedBasic.name;
             setSearchResult({
               ...parsedBasic,
               avgPrice: "실시간 시세 파악 중...",
@@ -562,12 +558,12 @@ export default function TastingApp() {
         }
       }
     } catch (basicErr) {
-      console.error("Basic info fetch error:", basicErr);
+      console.error("기본 정보 매핑 실패:", basicErr);
     }
 
-    // [2단계] 교정된 명칭으로 최적화 채널(데일리샷, 네이버 쇼핑, 엑스와인) 실시간 검색
+    // [2단계] 국내 양대 채널 (데일리샷, 네이버 쇼핑) 실시간 타겟 서칭
     const maxRetries = 3;
-    let delay = 1500;
+    let delay = 1000;
 
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -576,29 +572,30 @@ export default function TastingApp() {
             role: "user",
             parts: [{
               text: `
-                검색 대상 주류: "${correctedName}"
+                검색 주류: "${correctedName}"
                 
-                [필수 검색 지침]
-                1. 최신 웹 검색 결과를 바탕으로 오직 국내 대표 채널인 '데일리샷' 스마트오더 앱 시세와 '네이버 쇼핑 가격비교' 두 곳의 실거래 최신 소매 가격만 타겟팅하여 수집하세요.
-                2. 가격 정보("avgPrice", "bargainInfo") 필드에는 다른 문장이나 군더더기 설명 없이 오직 깔끔한 숫자 가격대 범위 포맷만 기재하세요. (예: "1,000,000원 ~ 1,300,000원")
-                3. 데이터가 잡히지 않거나 불확실하면 단호하게 "정보없음"으로 채우세요.
-                4. 가격 정보의 구체적인 '출처' 플랫폼 이름도 명확히 매핑하세요. (예: "데일리샷", "네이버 쇼핑")
+                [지침]
+                1. 구글 검색 결과를 기반으로 국내 주류 채널 '데일리샷' 앱 시세와 '네이버 쇼핑 가격비교'의 최신 실거래가 정보를 수집하세요.
+                2. 가격 정보 필드("avgPrice", "bargainInfo")에는 사족, 텍스트 설명 없이 오직 숫자 범위만 기재하세요. (예: "150,000원 ~ 170,000원")
+                3. 알 수 없는 상태라면 "정보없음"으로 일관되게 반환하세요.
+                4. 매칭된 출처 플랫폼 이름("데일리샷" 또는 "네이버 쇼핑")을 명확히 명시하세요.
                 
-                위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 및 출처 데이터만 한 번에 반환해줘:
+                오직 아래 JSON 구조만 반환하세요:
                 {
-                  "avgPrice": "가격 범위만 (예: 120,000원 ~ 140,000원)",
+                  "avgPrice": "가격대 범위 (예: 100,000원 ~ 120,000원)",
                   "avgPriceSource": "출처 이름 (예: 데일리샷)",
-                  "bargainInfo": "가격 범위만 (예: 110,000원 ~ 115,000원)",
+                  "bargainInfo": "가격대 범위 (예: 95,000원 ~ 105,000원)",
                   "bargainInfoSource": "출처 이름 (예: 네이버 쇼핑)"
                 }
               `
             }]
           }],
-          tools: [{ "google_search": {} }]
+          tools: [{ "google_search": {} }],
+          generationConfig: { responseMimeType: "application/json" }
         };
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000); 
+        const timeoutId = setTimeout(() => controller.abort(), 12000); 
 
         const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
@@ -609,29 +606,18 @@ export default function TastingApp() {
         
         clearTimeout(timeoutId);
 
-        if (priceResponse.status === 503 && i < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-          continue;
-        }
-
-        if (!priceResponse.ok) {
-          throw new Error(`Price API failed with status ${priceResponse.status}`);
-        }
+        if (!priceResponse.ok) throw new Error(`Status ${priceResponse.status}`);
 
         const priceResult = await priceResponse.json();
         const candidate = priceResult.candidates?.[0];
 
         if (candidate?.content?.parts?.[0]?.text) {
           const parsedPrice = safeParseJSON(candidate.content.parts[0].text);
-          
           let groundings = [];
-          if (candidate.groundingMetadata && candidate.groundingMetadata.groundingAttributions) {
+          
+          if (candidate.groundingMetadata?.groundingAttributions) {
             groundings = candidate.groundingMetadata.groundingAttributions
-              .map(attr => ({
-                uri: attr.web?.uri,
-                title: attr.web?.title
-              }))
+              .map(attr => ({ uri: attr.web?.uri, title: attr.web?.title }))
               .filter(src => src.uri && src.title);
           }
 
@@ -641,12 +627,9 @@ export default function TastingApp() {
               const lowerSrc = sourceName.toLowerCase();
               const match = groundings.find(g => {
                 const url = g.uri.toLowerCase();
-                const title = g.title.toLowerCase();
-                return url.includes(lowerSrc) || title.includes(lowerSrc) ||
+                return url.includes(lowerSrc) || g.title.toLowerCase().includes(lowerSrc) ||
                        (lowerSrc.includes('데일리샷') && url.includes('dailyshot')) ||
-                       (lowerSrc.includes('네이버') && url.includes('naver')) ||
-                       (lowerSrc.includes('엑스와인') && url.includes('x-wine')) ||
-                       (lowerSrc.includes('xwine') && url.includes('xwine'));
+                       (lowerSrc.includes('네이버') && url.includes('naver'));
               });
               return match ? match.uri : (groundings[0]?.uri || null);
             };
@@ -663,8 +646,6 @@ export default function TastingApp() {
             }));
           }
           break;
-        } else {
-          throw new Error("Empty text candidate from Price API");
         }
       } catch (priceErr) {
         if (i === maxRetries - 1) {
@@ -676,14 +657,12 @@ export default function TastingApp() {
             bargainInfoSource: prev?.bargainInfoSource === "출처 확인 중..." ? "정보없음" : prev?.bargainInfoSource,
             sources: []
           }));
-          console.error("Price fetch failed:", priceErr);
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2;
         }
       }
     }
-
     setIsSearching(false);
   };
   const triggerFileInput = () => fileInputRef.current?.click();
@@ -710,27 +689,24 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     const base64Data = base64Image.split(',')[1];
-
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
-    // 라벨 자체의 비주얼 이미지 분석 및 수기 적기인증 OCR을 수행하기 위한 멀티모달 정교한 페이로드 설계
     const payload = {
       contents: [{
         role: "user",
         parts: [
           {
             text: `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
-          현재 선택한 주종 카테고리는 '${config.name}'입니다.
-          
-          [이미지 정밀 해독 요구]
-          1. 이미지 내 주류 라벨을 정독하여 정확한 브랜드/술 명칭(한글과 영문 병기), 분류(예: 카베르네 소비뇽 와인, 싱글몰트 위스키 등)를 규격화해 주세요.
-          2. 라벨에 표기된 생산지(국가/지표)와 빈티지(생산년도 또는 숙성년도)를 파악해 주세요.
-          3. 실제 업로드된 술병이 현재 선택한 주종('${selectedLiquorType}')과 명백히 다를 경우, 'detectedCategory' 항목에 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 추론해 지정해 주세요.
-
-          [실물인증코드 OCR 검사]
-          사진 속에 종이 쪽지나 포스트잇에 수작업(자필)으로 적은 인증코드 '${verificationCode}' 텍스트가 식별된다면 'isCodeDetected'를 true로, 보이지 않거나 오차가 있으면 false로 판별해주세요.
-          
-          모든 결과를 지체 없이 아래 지정된 JSON 규격으로 반환해줘.` },
+            현재 선택한 주종 카테고리는 '${config.name}'입니다.
+            
+            [요구사항]
+            1. 이미지 내 주류 라벨을 정독하여 정확한 브랜드/술 명칭(한글과 영문 병기), 분류를 추출하세요.
+            2. 생산지와 빈티지(생산년도 또는 숙성년도)를 파악하세요.
+            3. 실제 술병이 현재 선택한 주종('${selectedLiquorType}')과 다를 경우, 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer')을 추론해 'detectedCategory'에 담으세요.
+            4. 사진 속에 자필로 적은 인증코드 '${verificationCode}' 텍스트가 식별된다면 'isCodeDetected'를 true로, 없으면 false로 판별하세요.
+            
+            JSON 규격에 맞춰 다른 설명 없이 출력하세요.` 
+          },
           {
             inlineData: {
               mimeType: "image/jpeg",
@@ -740,24 +716,12 @@ export default function TastingApp() {
         ]
       }],
       generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            "name": { type: "STRING", description: "검색 및 해독된 정확한 술 한글/영문 이름" },
-            "type": { type: "STRING", description: "주종별 상세 품종 및 세부 분류" },
-            "region": { type: "STRING", description: "생산 국가 및 정밀 상세 지역" },
-            "vintage": { type: "STRING", description: "빈티지 연도 또는 캐스크 숙성년수" },
-            "detectedCategory": { type: "STRING", description: "감지된 주종 키값 ('wine', 'whiskey', 'sake', 'beer' 중 하나)" },
-            "isCodeDetected": { type: "BOOLEAN", description: "수기 적기인증코드가 사진 내에 또렷이 발견되었는지 여부" }
-          },
-          required: ["name", "type", "region", "vintage", "detectedCategory", "isCodeDetected"]
-        }
+        responseMimeType: "application/json"
       }
     };
 
-    const maxRetries = 3;
-    let delay = 1500;
+    const maxRetries = 2;
+    let delay = 1000;
 
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -767,51 +731,44 @@ export default function TastingApp() {
           body: JSON.stringify(payload)
         });
 
-        if (response.status === 503 && i < maxRetries - 1) {
-          showToast(`⚠️ 구글 서버 과부하로 재시도 중입니다... (${i + 1}/${maxRetries}회)`, "info");
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-          continue;
-        }
-
         if (!response.ok) {
           const errText = await response.text();
-          console.error(`Gemini API 에러 상세: ${response.status} - ${errText}`);
-          throw new Error(`API failed: ${response.status}`);
+          console.error(`Gemini 에러 리포트: ${response.status} - ${errText}`);
+          throw new Error(`API failed with status ${response.status}`);
         }
+        
         const result = await response.json();
+        const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
-        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-          const parsed = safeParseJSON(result.candidates[0].content.parts[0].text);
+        if (responseText) {
+          const parsed = safeParseJSON(responseText);
           if (parsed) {
             setAnalysisResult(parsed);
 
             if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
               if (LIQUOR_CONFIG[parsed.detectedCategory]) {
                 setSelectedLiquorType(parsed.detectedCategory);
-                showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
+                showToast(`주종을 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}'으로 변경했습니다!`, 'success');
               }
             }
 
             if (shareToCommunity) {
               if (parsed.isCodeDetected) {
-                showToast("실물 인증코드가 성공적으로 감지되었습니다! 즉시 정식인증 마크가 부여됩니다.", "success");
+                showToast("실물 인증코드가 성공적으로 감지되었습니다!", "success");
               } else {
-                showToast("쪽지 코드를 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.", "info");
+                showToast("쪽지 코드를 감지하지 못해 '집단지성 인증 투표'로 등록됩니다.", "info");
               }
             }
+            setIsAnalyzing(false);
+            return; // 성공 시 마감
           }
-          setIsAnalyzing(false);
-          break;
-        } else {
-          throw new Error("Empty response parts");
         }
+        throw new Error("Invalid response format");
       } catch (err) {
-        // : any를 지우고 자바스크립트 표준 문법으로 변경합니다.
-        console.error("라벨 분석 중 실제 발생한 에러:", err);
+        console.error("라벨 분석 트라이 횟수 실패 로그:", err);
         if (i === maxRetries - 1) {
-          setError(`분석 지연 또는 네트워크 오류가 발생했습니다. (원인: ${err?.message || 'Timeout'})`);
-          showToast("라벨 분석 실패", "error");
+          setError("네트워크 지연 또는 용량 제한으로 분석이 지연되었습니다. 수기 작성을 진행하셔도 좋습니다.");
+          showToast("라벨 분석 네트워크 타임아웃", "error");
           setIsAnalyzing(false);
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -820,7 +777,6 @@ export default function TastingApp() {
       }
     }
   };
-
   const handleSaveNote = async () => {
     if (!analysisResult) {
       showToast("라벨 분석이 아직 완료되지 않았습니다.", "error");
