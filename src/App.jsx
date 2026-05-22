@@ -579,16 +579,16 @@ export default function TastingApp() {
                 검색 대상 주류: "${correctedName}"
                 
                 [필수 검색 지침]
-                1. 최신 웹 검색 결과를 바탕으로 오직 국내 플랫폼인 '데일리샷', '네이버 쇼핑 가격비교', '엑스와인(X-wine)' 3곳의 실거래 가격대 정보만 확인하세요.
-                2. 가격 정보("avgPrice", "bargainInfo")에는 사족이나 설명글(예: "부근에 거래됩니다", "형성되어 있습니다")을 완벽히 제외하고, 오직 숫자 가격 범위 포맷만 기재하세요. (예: "1,000,000원 ~ 1,300,000원")
-                3. 만약 국내 웹상에서 명확한 실거래 시세를 찾을 수 없다면 "정보없음"이라고 기입하세요.
-                4. 시세 정보의 '출처' 플랫폼 이름도 아래 규격에 정밀하게 명시해 주세요. (예: 데일리샷, 네이버 쇼핑, 엑스와인 등)
+                1. 최신 웹 검색 결과를 바탕으로 오직 국내 대표 채널인 '데일리샷' 스마트오더 앱 시세와 '네이버 쇼핑 가격비교' 두 곳의 실거래 최신 소매 가격만 타겟팅하여 수집하세요.
+                2. 가격 정보("avgPrice", "bargainInfo") 필드에는 다른 문장이나 군더더기 설명 없이 오직 깔끔한 숫자 가격대 범위 포맷만 기재하세요. (예: "1,000,000원 ~ 1,300,000원")
+                3. 데이터가 잡히지 않거나 불확실하면 단호하게 "정보없음"으로 채우세요.
+                4. 가격 정보의 구체적인 '출처' 플랫폼 이름도 명확히 매핑하세요. (예: "데일리샷", "네이버 쇼핑")
                 
-                위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 및 출처 데이터만 정확하게 반환해줘:
+                위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 및 출처 데이터만 한 번에 반환해줘:
                 {
-                  "avgPrice": "가격 범위만 (예: 100,000원 ~ 120,000원)",
+                  "avgPrice": "가격 범위만 (예: 120,000원 ~ 140,000원)",
                   "avgPriceSource": "출처 이름 (예: 데일리샷)",
-                  "bargainInfo": "가격 범위만 (예: 95,000원 ~ 105,000원)",
+                  "bargainInfo": "가격 범위만 (예: 110,000원 ~ 115,000원)",
                   "bargainInfoSource": "출처 이름 (예: 네이버 쇼핑)"
                 }
               `
@@ -694,7 +694,8 @@ export default function TastingApp() {
 
     const reader = new FileReader();
     reader.onloadend = async () => {
-      const compressed = await compressImage(reader.result, 400);
+      // 너비를 300으로 조정하고 용량을 극적으로 줄여 Vercel/Gemini 타임아웃을 원천 차단합니다.
+      const compressed = await compressImage(reader.result, 300);
       setImage(compressed);
       analyzeLabel(compressed);
     };
