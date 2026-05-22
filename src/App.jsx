@@ -659,30 +659,35 @@ export default function TastingApp() {
     만약 현재 업로드된 보틀이 와인인데 위스키로 잘못 선택된 경우처럼 실제 분석된 종류가 다를 경우, 'detectedCategory' 항목에 알맞은 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 자동으로 추론하여 지정해주세요.`;
 
     const payload = {
-      contents: [{
-        role: "user", parts: [
-          { text: prompt },
-          { inlineData: { mimeType: "image/jpeg", data: base64Data } }
-        ]
-      }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            "name": { type: "STRING", description: "주류의 정식 공식 명칭" },
-            "type": { type: "STRING", description: "상세 종류/스타일분류" },
-            "region": { type: "STRING", description: "생산지 국가 및 세부지역" },
-            "vintage": { type: "STRING", description: "빈티지 년도 또는 숙성연수 정보 (없을 경우 null)" },
-            "grape": { type: "STRING", description: "포도 품종, 사용 맥아, 주조미 쌀 품종, 캐스크 정보 등" },
-            "producer": { type: "STRING", description: "양조장/증류소/제조업체 명칭" },
-            "detectedCategory": { type: "STRING", description: "자동 판정 카테고리 ('wine', 'whiskey', 'sake', 'beer' 중 반드시 택일)" },
-            "isCodeDetected": { type: "BOOLEAN", description: "이미지 내에서 정확한 인증코드 문자열 '${verificationCode}'가 인지/판독되었는지 여부" }
-          },
-          required: ["name", "type", "region", "vintage", "grape", "producer", "detectedCategory", "isCodeDetected"]
-        }
-      }
-    };
+          contents: [{
+            role: "user",
+            parts: [{
+              text: `
+                검색 대상 주류: "${searchQuery}"
+                
+                [필수 검색 지침]
+                1. 가격 및 시세 정보를 수집할 때, 로그인 장벽이 없는 공개된 국내 오픈 웹사이트 정보를 최우선 기준으로 삼으세요:
+                   - 국내 오픈 와인 정보 포털 '엑스와인(XWINE)' 및 '와인21'에 공개된 실시간 가격
+                   - '네이버 쇼핑 / 스마트스토어'의 실시간 최저가 및 실거래 언급 가격대
+                2. 데일리샷 앱이나 네이버 카페(와쌉)처럼 로그인 또는 앱 설치가 필수적인 폐쇄형 플랫폼 정보는 크롤링 차단 에러를 유발하므로 과감히 수집 대상에서 제외하세요.
+                3. 가격 정보는 사용자가 직관적으로 파악할 수 있도록 대략적인 가격대 범위(예: 150,000원 ~ 175,000원 부근) 형태로 깔끔하게 포맷팅해 주어야 합니다.
+                4. 만약 위 오픈 웹상에서 해당 주류에 대한 명확한 거래 흔적을 도저히 찾을 수 없다면, 허위 정보를 지어내지 말고 가격 필드에 단호하게 "정보없음"이라고 기입하세요.
+                
+                [출력 JSON 구조 명세]
+                반드시 아래의 Key들을 모두 포함한 올바른 JSON 데이터 구조 하나만 반환해야 합니다. 앞뒤에 마크다운 기호는 절대 붙이지 마세요.
+                - "name": 검색된 정확한 술 한글 및 영문 명칭
+                - "summary": 역사와 특징 요약 (1~2줄)
+                - "tasting": 아로마, 팔레트, 피니시 주요 특징
+                - "avgPrice": 대략적인 평균 가격대 범위 (데이터가 없으면 '정보없음')
+                - "bargainInfo": 스마트스토어 최저가 혹은 행사 기준의 특가 범위 정보 (데이터가 없으면 '정보없음')
+              `
+            }]
+          }],
+          tools: [{ "google_search": {} }], // REST API 규격에 맞게 언더바로 매칭
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        };
 
     const maxRetries = 3;
     let delay = 1500;
