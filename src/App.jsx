@@ -574,16 +574,16 @@ export default function TastingApp() {
                 
                 [필수 검색 지침]
                 1. 최신 웹 검색 결과를 바탕으로 국내 주류 스마트오더 플랫폼 '데일리샷' 최신 소매가와 네이버 카페 '와인싸게사는곳(와쌉)' 등의 실제 유저 거래 시세를 파악하세요.
-                2. 가격 정보는 대략적인 가격대 범위(예: 150,000원 ~ 175,000원 부근)로 산출하세요.
-                3. 만약 국내 웹상에서 명확한 실거래 시세나 정보 흔적을 찾을 수 없다면 가격 관련 필드에 "정보없음"이라고 기입하세요.
-                4. 해당 평균 시세와 할인 정보의 '출처' 플랫폼/커뮤니티 이름도 아래 규격에 명시해 주세요. (예: 데일리샷, 와쌉, X와인, 네이버쇼핑 등)
+                2. 중요: 가격 정보("avgPrice", "bargainInfo")에는 다른 수식어, 줄글, 설명("부근", "형성되어 있습니다" 등)을 일체 배제하고 오직 숫자 가격 범위 포맷만 기재하세요. (예: "1,000,000원 ~ 1,300,000원")
+                3. 만약 국내 웹상에서 명확한 실거래 시세를 찾을 수 없다면 "정보없음"이라고 기입하세요.
+                4. 해당 평균 시세와 할인 정보의 '출처' 플랫폼/커뮤니티 이름도 아래 규격에 명시해 주세요. (예: 데일리샷, 와쌉, 데일리샷 스마트오더 등)
                 
                 위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 및 출처 데이터만 정확하게 반환해줘:
                 {
-                  "avgPrice": "평균 소매 최저가 범위 (없으면 '정보없음')",
-                  "avgPriceSource": "평균 시세 정보의 구체적인 출처 (예: 데일리샷, 네이버 쇼핑 등, 없으면 '정보없음')",
-                  "bargainInfo": "성지 매장 행사 또는 스마트오더 특가 범위 정보 (없으면 '정보없음')",
-                  "bargainInfoSource": "성지/특가 정보의 구체적인 출처 (예: 와쌉, 데일리샷 등, 없으면 '정보없음')"
+                  "avgPrice": "숫자 가격 범위만 (예: 100,000원 ~ 120,000원)",
+                  "avgPriceSource": "출처 이름 (예: 데일리샷)",
+                  "bargainInfo": "숫자 가격 범위만 (예: 95,000원 ~ 105,000원)",
+                  "bargainInfoSource": "출처 이름 (예: 와쌉)"
                 }
               `
             }]
@@ -1569,41 +1569,57 @@ export default function TastingApp() {
                 <p className="text-sm text-gray-600 leading-relaxed bg-rose-50/50 p-3 rounded-xl border border-rose-100">{searchResult.tasting}</p>
               </div>
 
-              <div className="grid gap-3 pt-2">
-                {/* 1. 시중 평균 시세 상자 (출처 표기 완료) */}
-                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
-                  <h4 className="flex items-center text-xs font-bold text-blue-800 mb-1">
-                    <Icon name="DollarSign" className="w-4 h-4 mr-1" /> 시중 평균 시세
-                  </h4>
-                  <div className="flex flex-col gap-1 mt-1">
-                    <div className="flex items-center gap-2">
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                {/* 1. 시중 평균 시세 상자 */}
+                <div className="bg-blue-50/40 border border-blue-100/70 p-3.5 rounded-2xl flex flex-col justify-between">
+                  <div>
+                    <h4 className="flex items-center text-[11px] font-black text-blue-800 mb-1.5">
+                      <Icon name="DollarSign" className="w-3.5 h-3.5 mr-1" /> 시중 평균 시세
+                    </h4>
+                    <div className="flex items-center gap-1.5 my-1">
                       {searchResult.avgPrice === "실시간 시세 파악 중..." && (
-                        <Icon name="Loader2" className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+                        <Icon name="Loader2" className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
                       )}
-                      <p className="text-sm font-semibold text-gray-800">{searchResult.avgPrice}</p>
+                      <p className="text-sm font-black text-gray-900 tracking-tight">{searchResult.avgPrice}</p>
                     </div>
-                    {searchResult.avgPriceSource && searchResult.avgPriceSource !== "정보없음" && (
-                      <p className="text-[10px] text-gray-400 font-bold block mt-0.5">출처: {searchResult.avgPriceSource}</p>
-                    )}
                   </div>
+                  {searchResult.avgPriceSource && searchResult.avgPriceSource !== "정보없음" && (
+                    <p className="text-[9px] text-gray-400 font-bold mt-1.5 pt-1.5 border-t border-blue-100/30">
+                      출처: {searchResult.sources?.[0]?.uri ? (
+                        <a href={searchResult.sources[0].uri} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline inline-flex items-center gap-0.5 font-extrabold">
+                          {searchResult.avgPriceSource} 🔗
+                        </a>
+                      ) : (
+                        <span className="text-gray-500 font-medium">{searchResult.avgPriceSource}</span>
+                      )}
+                    </p>
+                  )}
                 </div>
 
-                {/* 2. 최근 성지/할인 정보 상자 (출처 표기 완료) */}
-                <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
-                  <h4 className="flex items-center text-xs font-bold text-amber-800 mb-1">
-                    <Icon name="MapPin" className="w-4 h-4 mr-1" /> 최근 성지/할인 정보
-                  </h4>
-                  <div className="flex flex-col gap-1 mt-1">
-                    <div className="flex items-center gap-2">
+                {/* 2. 최근 성지/할인 정보 상자 */}
+                <div className="bg-amber-50/40 border border-amber-100/70 p-3.5 rounded-2xl flex flex-col justify-between">
+                  <div>
+                    <h4 className="flex items-center text-[11px] font-black text-amber-800 mb-1.5">
+                      <Icon name="MapPin" className="w-3.5 h-3.5 mr-1" /> 최근 성지/할인 정보
+                    </h4>
+                    <div className="flex items-center gap-1.5 my-1">
                       {searchResult.bargainInfo === "최저가 정보 수집 중..." && (
-                        <Icon name="Loader2" className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+                        <Icon name="Loader2" className="w-3.5 h-3.5 animate-spin text-amber-600 shrink-0" />
                       )}
-                      <p className="text-sm font-semibold text-gray-800">{searchResult.bargainInfo}</p>
+                      <p className="text-sm font-black text-gray-900 tracking-tight">{searchResult.bargainInfo}</p>
                     </div>
-                    {searchResult.bargainInfoSource && searchResult.bargainInfoSource !== "정보없음" && (
-                      <p className="text-[10px] text-gray-400 font-bold block mt-0.5">출처: {searchResult.bargainInfoSource}</p>
-                    )}
                   </div>
+                  {searchResult.bargainInfoSource && searchResult.bargainInfoSource !== "정보없음" && (
+                    <p className="text-[9px] text-gray-400 font-bold mt-1.5 pt-1.5 border-t border-amber-100/30">
+                      출처: {searchResult.sources?.[1]?.uri || searchResult.sources?.[0]?.uri ? (
+                        <a href={searchResult.sources[1]?.uri || searchResult.sources[0]?.uri} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline inline-flex items-center gap-0.5 font-extrabold">
+                          {searchResult.bargainInfoSource} 🔗
+                        </a>
+                      ) : (
+                        <span className="text-gray-500 font-medium">{searchResult.bargainInfoSource}</span>
+                      )}
+                    </p>
+                  )}
                 </div>
               </div>
 
