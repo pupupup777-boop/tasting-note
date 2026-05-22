@@ -620,7 +620,6 @@ export default function TastingApp() {
             }
           }
 
-
     // ⚡ [버그 완치 핵심] 검색 작업이 모두 끝나면 성공/실패 여부 상관없이 돋보기 회전 상태를 반드시 오프시킵니다!
     setIsSearching(false);
   };
@@ -660,32 +659,36 @@ export default function TastingApp() {
     만약 현재 업로드된 보틀이 와인인데 위스키로 잘못 선택된 경우처럼 실제 분석된 종류가 다를 경우, 'detectedCategory' 항목에 알맞은 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 자동으로 추론하여 지정해주세요.`;
 
     const payload = {
-          contents: [{
-            role: "user",
-            parts: [{
-              text: `
-                검색 대상 주류: "${searchQuery}"
-                
-                [필수 검색 지침]
-                1. 구글 검색 결과를 바탕으로 국내 실거래 시세, 리쿼샵 공지 가격, 블로그 리뷰 시세를 종합하여 현실적인 시세를 파악하세요.
-                2. 가격 정보는 소비자가 체감할 수 있는 대략적인 가격대 범위(예: 95,000원 ~ 115,000원 부근) 형태로 유연하게 작성하세요.
-                3. 검색 결과에 명확한 가격 언급이 전혀 없다면 허위 정보를 지어내지 말고 가격 필드에 "정보없음"이라고 기입하세요.
-
-                [출력 형식 가이드 - 필수]
-                반드시 앞뒤에 \`\`\`json 이나 \`\`\` 같은 마크다운 기호를 절대 붙이지 말고, 오직 중괄호 { } 로만 시작해서 끝나도록 순수한 JSON 텍스트 양식으로만 답변해야 합니다. 안 그러면 시스템이 터집니다.
-
-                {
-                  "name": "검색된 정확한 술 한글 및 영문 명칭",
-                  "summary": "역사와 특징 요약 (1~2줄)",
-                  "tasting": "아로마, 팔레트, 피니시 주요 특징",
-                  "avgPrice": "대략적인 평균 가격대 범위 (데이터가 없으면 '정보없음')",
-                  "bargainInfo": "국내 최저가 성지 매장 혹은 할인 행사 기준의 대략적인 특가 범위 (데이터가 없으면 '정보없음')"
-                }
-              `
-            }]
+          contents: [{ 
+            role: "user", 
+            parts: [{ text: `
+              검색 대상 주류: "${searchQuery}"
+              
+              [필수 검색 지침]
+              1. 최신 웹 검색 결과를 바탕으로 로그인 장벽이 없는 공개된 정보처를 우선적으로 수색하여 실거래 시세를 파악하세요:
+                 - '네이버 쇼핑' 및 '네이버 스마트스토어' 최신 최저가 및 소매 시세
+                 - '와인21', '엑스와인(XWINE)' 등 로그인 없이 열려있는 주류 전문 직구몰 및 데이터베이스 사이트
+              2. 가격 정보는 단일 숫자가 아닌, 유저들이 실제로 참고할 수 있는 대략적인 가격대 범위(예: 110,000원 ~ 135,000원 부근)로 산출하세요.
+              3. 만약 국내 웹상에서 명확한 실거래 시세나 정보 흔적을 도저히 찾을 수 없다면, 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
+              
+              위 지침에 맞춰 아래 지정된 JSON 규격으로 데이터를 반환해줘.
+            ` }] 
           }],
-          tools: [{ "googleSearch": {} }] 
-          // ⚠️ 충돌을 일으키던 generationConfig 옵션을 완전히 삭제하여 인터넷 검색 기능을 활성화합니다.
+          tools: [{ "google_search": {} }], // 🟢 REST API 환경에 맞춰 google_search 언더바 규격으로 원복 적용
+          generationConfig: { 
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                "name": { type: "STRING", description: "검색된 정확한 술 한글/영문 이름" },
+                "summary": { type: "STRING", description: "역사와 특징을 1~2줄로 압축한 요약 정보" },
+                "tasting": { type: "STRING", description: "아로마, 팔레트, 피니시 주요 특징" },
+                "avgPrice": { type: "STRING", description: "네이버 쇼핑/스마트스토어 최저가 및 오픈웹 데이터를 기반으로 파악한 대략적인 평균 소매 가격 범위 (데이터가 전혀 없다면 '정보없음')" },
+                "bargainInfo": { type: "STRING", description: "스마트스토어 특가 행사 또는 오픈 직구몰 기준의 대략적인 최저가/특가 범위 정보 (알 수 없으면 '정보없음')" }
+              },
+              required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
+            }
+          }
         };
 
     const maxRetries = 3;
