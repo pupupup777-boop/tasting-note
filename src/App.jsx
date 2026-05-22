@@ -560,7 +560,7 @@ export default function TastingApp() {
                   }]
                 }],
                 // 🟢 REST API용 정석 snake_case 규격 "google_search" 완치!
-                tools: [{ "google_search": {} }],
+                tools: [{ "googleSearch": {} }],
                 generationConfig: {
                   responseMimeType: "application/json"
                 }
@@ -683,7 +683,7 @@ export default function TastingApp() {
               `
             }]
           }],
-          tools: [{ "google_search": {} }], // REST API 규격에 맞게 언더바로 매칭
+          tools: [{ "googleSearch": {} }], // REST API 규격에 맞게 언더바로 매칭
           generationConfig: {
             responseMimeType: "application/json"
           }
