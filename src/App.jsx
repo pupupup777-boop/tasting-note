@@ -567,7 +567,7 @@ export default function TastingApp() {
 
               // 🚀 [해결책 1] 구글 검색 봇이 렉 걸려 멈췄을 때 하염없이 대기하지 않도록 8초 타임아웃 연결장치 이식!
               const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 8000); 
+              const timeoutId = setTimeout(() => controller.abort(), 30000); 
 
               const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
                 method: 'POST',
