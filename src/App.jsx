@@ -159,6 +159,29 @@ const compressImage = (base64Str, maxWidth = 400) => {
   });
 };
 
+// Markdown 혹은 잘못 래핑된 JSON 텍스트를 방어적으로 안심 파싱해주는 유틸리티
+const safeParseJSON = (text) => {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (match && match[1]) {
+      try {
+        return JSON.parse(match[1]);
+      } catch (e2) {
+        console.error("Markdown JSON block parsing fail:", e2);
+      }
+    }
+    const cleanText = text.replace(/```json|```/g, '').trim();
+    try {
+      return JSON.parse(cleanText);
+    } catch (e3) {
+      console.error("Strict text stripping fail:", e3);
+      return null;
+    }
+  }
+};
+
 const FractionalStarRating = ({ value, onChange, onSave }) => {
   const [hoverValue, setHoverValue] = useState(null);
   const ratingRef = useRef(null);
@@ -224,7 +247,7 @@ export default function TastingApp() {
   const [activeReplyBox, setActiveReplyBox] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  // ⚡ [구조 혁신] 리액트 훅의 규칙 엄수: 서브 탭 상태 변수를 최상단 단일 구역으로 전진 배치하여 런타임 프리징 원천 봉쇄
+  // 리액트 훅의 규칙 엄수: 서브 탭 상태 변수
   const [subTab, setSubTab] = useState('lounge');
   const [isCommunityModal, setIsCommunityModal] = useState(false);
 
@@ -347,7 +370,6 @@ export default function TastingApp() {
     return userBadges;
   }, [communityPosts]);
 
-  // 무한 렌더링 루프를 원천 제거한 안전한 토스트 스위치
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
   };
@@ -492,7 +514,7 @@ export default function TastingApp() {
     setIsSearching(true);
     setSearchResult(null);
 
-    // 🚀 [1단계] 초고속 기본 정보 가져오기 (Google Search 도구 OFF -> 0.3초 초고속 출력)
+    // [1단계] 초고속 기본 정보 가져오기 (0.3초 쾌속 응답 타겟팅)
     try {
       const basicPayload = {
         contents: [{
@@ -520,106 +542,126 @@ export default function TastingApp() {
       if (basicResponse.ok) {
         const basicResult = await basicResponse.json();
         if (basicResult.candidates?.[0]?.content?.parts?.[0]?.text) {
-          const parsedBasic = JSON.parse(basicResult.candidates[0].content.parts[0].text);
-          // 1차 화면 즉시 노출 (시세와 할인 칸은 로딩중 애니메이션 상태로 대기)
-          setSearchResult({
-            ...parsedBasic,
-            avgPrice: "실시간 시세 파악 중...",
-            bargainInfo: "최저가 정보 수집 중..."
-          });
+          const parsedBasic = safeParseJSON(basicResult.candidates[0].content.parts[0].text);
+          if (parsedBasic) {
+            setSearchResult({
+              ...parsedBasic,
+              avgPrice: "실시간 시세 파악 중...",
+              avgPriceSource: "출처 확인 중...",
+              bargainInfo: "최저가 정보 수집 중...",
+              bargainInfoSource: "출처 확인 중...",
+              sources: []
+            });
+          }
         }
       }
     } catch (basicErr) {
       console.error("Basic info fetch error:", basicErr);
     }
 
-    // 🚀 [2단계] 실시간 정밀 시세 검색하기 (Google Search 도구 ON -> 정교한 웹 크롤링)
+    // [2단계] 실시간 정밀 시세 검색하기 (구글 서치봇 활성화)
     const maxRetries = 3;
     let delay = 1500;
 
     for (let i = 0; i < maxRetries; i++) {
-            try {
-              const pricePayload = {
-                contents: [{
-                  role: "user",
-                  parts: [{
-                    text: `
-                      검색 대상 주류: "${searchQuery}"
-                      
-                      [필수 검색 지침]
-                      1. 최신 웹 검색 결과를 바탕으로 국내 주류 스마트오더 플랫폼 '데일리샷' 최신 소매가와 네이버 카페 '와인싸게사는곳(와쌉)' 등의 실제 유저 거래 시세를 파악하세요.
-                      2. 가격 정보는 맹신적인 한 가지 숫자가 아닌, 유저들이 실제로 접근 가능한 대략적인 가격대 범위(예: 150,000원 ~ 175,000원 부근)로 산출하세요.
-                      3. 만약 국내 웹상에서 명확한 실거래 시세나 정보 흔적을 도저히 찾을 수 없다면 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
-                      
-                      위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 데이터만 반환해줘:
-                      {
-                        "avgPrice": "평균 소매 최저가 범위 (없으면 '정보없음')",
-                        "bargainInfo": "성지 매장 행사 또는 스마트오더 특가 범위 정보 (없으면 '정보없음')"
-                      }
-                    `
-                  }]
-                }],
-                // 🟢 REST API용 정석 snake_case 규격 "googleSearch"를 완벽하게 고정 수호합니다!
-                tools: [{ "googleSearch": {} }]
-                // ⚠️ [핵심 완치] 구글 검색 봇 활성화 시 responseMimeType을 쓰면 서버가 차단됩니다. 해당 옵션을 삭제합니다.
-              };
+      try {
+        const pricePayload = {
+          contents: [{
+            role: "user",
+            parts: [{
+              text: `
+                검색 대상 주류: "${searchQuery}"
+                
+                [필수 검색 지침]
+                1. 최신 웹 검색 결과를 바탕으로 국내 주류 스마트오더 플랫폼 '데일리샷' 최신 소매가와 네이버 카페 '와인싸게사는곳(와쌉)' 등의 실제 유저 거래 시세를 파악하세요.
+                2. 가격 정보는 대략적인 가격대 범위(예: 150,000원 ~ 175,000원 부근)로 산출하세요.
+                3. 만약 국내 웹상에서 명확한 실거래 시세나 정보 흔적을 찾을 수 없다면 가격 관련 필드에 "정보없음"이라고 기입하세요.
+                4. 해당 평균 시세와 할인 정보의 '출처' 플랫폼/커뮤니티 이름도 아래 규격에 명시해 주세요. (예: 데일리샷, 와쌉, X와인, 네이버쇼핑 등)
+                
+                위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 및 출처 데이터만 정확하게 반환해줘:
+                {
+                  "avgPrice": "평균 소매 최저가 범위 (없으면 '정보없음')",
+                  "avgPriceSource": "평균 시세 정보의 구체적인 출처 (예: 데일리샷, 네이버 쇼핑 등, 없으면 '정보없음')",
+                  "bargainInfo": "성지 매장 행사 또는 스마트오더 특가 범위 정보 (없으면 '정보없음')",
+                  "bargainInfoSource": "성지/특가 정보의 구체적인 출처 (예: 와쌉, 데일리샷 등, 없으면 '정보없음')"
+                }
+              `
+            }]
+          }],
+          tools: [{ "google_search": {} }] // 표준 google_search 스펙 준수
+        };
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000); 
 
-              // 🚀 [해결책 1] 구글 검색 봇이 렉 걸려 멈췄을 때 하염없이 대기하지 않도록 8초 타임아웃 연결장치 이식!
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 30000); 
+        const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(pricePayload),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
 
-              const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(pricePayload),
-                signal: controller.signal // 타임아웃 신호 연결
-              });
-              
-              clearTimeout(timeoutId); // 성공 시 타임아웃 타이머 해제
+        if (priceResponse.status === 503 && i < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+          continue;
+        }
 
-              if (priceResponse.status === 503 && i < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2;
-                continue;
-              }
+        if (!priceResponse.ok) {
+          throw new Error(`Price API failed with status ${priceResponse.status}`);
+        }
 
-              // 🟢 에러를 명시적으로 던져서 무한 대기 버그(Silent Loop Fail)를 철저히 차단
-              if (!priceResponse.ok) {
-                throw new Error(`Price API failed with status ${priceResponse.status}`);
-              }
+        const priceResult = await priceResponse.json();
+        const candidate = priceResult.candidates?.[0];
 
-              const priceResult = await priceResponse.json();
-              if (priceResult.candidates?.[0]?.content?.parts?.[0]?.text) {
-                const parsedPrice = JSON.parse(priceResult.candidates[0].content.parts[0].text);
-                // 1차 즉시 출력되었던 화면에 최신 시세 데이터만 부드럽게 Merge 병합!
-                setSearchResult(prev => ({
-                  ...prev,
-                  avgPrice: parsedPrice.avgPrice || "정보없음",
-                  bargainInfo: parsedPrice.bargainInfo || "정보없음"
-                }));
-                break; // 시세 매칭 성공 즉시 탈출
-              } else {
-                // 🚀 [해결책 2] 구글 서버가 성공은 했는데 껍데기만 돌려줬을 때, 무한 대기하지 않고 에러를 강제 발생시켜 '정보없음'으로 안전하게 넘어가게 유도!
-                throw new Error("Empty text candidate from Price API");
-              }
-            } catch (priceErr) {
-              if (i === maxRetries - 1) {
-                // 최종 3회차 실패 시 뱅글이를 정지시키며 "정보없음" 가드 처리 발동
-                setSearchResult(prev => ({
-                  ...prev,
-                  avgPrice: prev?.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev?.avgPrice,
-                  bargainInfo: prev?.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev?.bargainInfo
-                }));
-                console.error("Price fetch failed after retries:", priceErr);
-              } else {
-                await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2;
-              }
-            }
+        if (candidate?.content?.parts?.[0]?.text) {
+          const parsedPrice = safeParseJSON(candidate.content.parts[0].text);
+          
+          // 실시간 구글 서칭 뉴스/블로그/쇼핑몰 어트리뷰션 출처(Citations) 추출
+          let groundings = [];
+          if (candidate.groundingMetadata && candidate.groundingMetadata.groundingAttributions) {
+            groundings = candidate.groundingMetadata.groundingAttributions
+              .map(attr => ({
+                uri: attr.web?.uri,
+                title: attr.web?.title
+              }))
+              .filter(src => src.uri && src.title);
           }
 
-    // ⚡ [버그 완치 핵심] 검색 작업이 모두 끝나면 성공/실패 여부 상관없이 돋보기 회전 상태를 반드시 오프시킵니다!
+          if (parsedPrice) {
+            setSearchResult(prev => ({
+              ...prev,
+              avgPrice: parsedPrice.avgPrice || "정보없음",
+              avgPriceSource: parsedPrice.avgPriceSource || "정보없음",
+              bargainInfo: parsedPrice.bargainInfo || "정보없음",
+              bargainInfoSource: parsedPrice.bargainInfoSource || "정보없음",
+              sources: groundings
+            }));
+          }
+          break;
+        } else {
+          throw new Error("Empty text candidate from Price API");
+        }
+      } catch (priceErr) {
+        if (i === maxRetries - 1) {
+          setSearchResult(prev => ({
+            ...prev,
+            avgPrice: prev?.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev?.avgPrice,
+            avgPriceSource: prev?.avgPriceSource === "출처 확인 중..." ? "정보없음" : prev?.avgPriceSource,
+            bargainInfo: prev?.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev?.bargainInfo,
+            bargainInfoSource: prev?.bargainInfoSource === "출처 확인 중..." ? "정보없음" : prev?.bargainInfoSource,
+            sources: []
+          }));
+          console.error("Price fetch failed after retries:", priceErr);
+        } else {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
+      }
+    }
+
     setIsSearching(false);
   };
 
@@ -648,47 +690,48 @@ export default function TastingApp() {
     const base64Data = base64Image.split(',')[1];
 
     const config = LIQUOR_CONFIG[selectedLiquorType];
-    const prompt = `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
-    현재 선택한 주종 카테고리는 '${config.name}'입니다.
-    
-    [실물인증코드 OCR 검사]
-    사진 속에 종이 쪽지나 포스트잇에 수작업으로 적은 인증코드 '${verificationCode}' 텍스트가 식별된다면 'isCodeDetected'를 true로, 보이지 않거나 오차가 있으면 false로 판별해주세요.
-    
-    [주종 자동 동기화 보정]
-    만약 현재 업로드된 보틀이 와인인데 위스키로 잘못 선택된 경우처럼 실제 분석된 종류가 다를 경우, 'detectedCategory' 항목에 알맞은 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 자동으로 추론하여 지정해주세요.`;
 
+    // 라벨 자체의 비주얼 이미지 분석 및 수기 적기인증 OCR을 수행하기 위한 멀티모달 정교한 페이로드 설계
     const payload = {
-          contents: [{ 
-            role: "user", 
-            parts: [{ text: `
-              검색 대상 주류: "${searchQuery}"
-              
-              [필수 검색 지침]
-              1. 최신 웹 검색 결과를 바탕으로 로그인 장벽이 없는 공개된 정보처를 우선적으로 수색하여 실거래 시세를 파악하세요:
-                 - '네이버 쇼핑' 및 '네이버 스마트스토어' 최신 최저가 및 소매 시세
-                 - '와인21', '엑스와인(XWINE)' 등 로그인 없이 열려있는 주류 전문 직구몰 및 데이터베이스 사이트
-              2. 가격 정보는 단일 숫자가 아닌, 유저들이 실제로 참고할 수 있는 대략적인 가격대 범위(예: 110,000원 ~ 135,000원 부근)로 산출하세요.
-              3. 만약 국내 웹상에서 명확한 실거래 시세나 정보 흔적을 도저히 찾을 수 없다면, 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
-              
-              위 지침에 맞춰 아래 지정된 JSON 규격으로 데이터를 반환해줘.
-            ` }] 
-          }],
-          tools: [{ "googleSearch": {} }], // 🟢 REST API 환경에 맞춰 googleSearch 언더바 규격으로 원복 적용
-          generationConfig: { 
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                "name": { type: "STRING", description: "검색된 정확한 술 한글/영문 이름" },
-                "summary": { type: "STRING", description: "역사와 특징을 1~2줄로 압축한 요약 정보" },
-                "tasting": { type: "STRING", description: "아로마, 팔레트, 피니시 주요 특징" },
-                "avgPrice": { type: "STRING", description: "네이버 쇼핑/스마트스토어 최저가 및 오픈웹 데이터를 기반으로 파악한 대략적인 평균 소매 가격 범위 (데이터가 전혀 없다면 '정보없음')" },
-                "bargainInfo": { type: "STRING", description: "스마트스토어 특가 행사 또는 오픈 직구몰 기준의 대략적인 최저가/특가 범위 정보 (알 수 없으면 '정보없음')" }
-              },
-              required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
+      contents: [{ 
+        role: "user", 
+        parts: [
+          { text: `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
+          현재 선택한 주종 카테고리는 '${config.name}'입니다.
+          
+          [이미지 정밀 해독 요구]
+          1. 이미지 내 주류 라벨을 정독하여 정확한 브랜드/술 명칭(한글과 영문 병기), 분류(예: 카베르네 소비뇽 와인, 싱글몰트 위스키 등)를 규격화해 주세요.
+          2. 라벨에 표기된 생산지(국가/지표)와 빈티지(생산년도 또는 숙성년도)를 파악해 주세요.
+          3. 실제 업로드된 술병이 현재 선택한 주종('${selectedLiquorType}')과 명백히 다를 경우, 'detectedCategory' 항목에 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 추론해 지정해 주세요.
+
+          [실물인증코드 OCR 검사]
+          사진 속에 종이 쪽지나 포스트잇에 수작업(자필)으로 적은 인증코드 '${verificationCode}' 텍스트가 식별된다면 'isCodeDetected'를 true로, 보이지 않거나 오차가 있으면 false로 판별해주세요.
+          
+          모든 결과를 지체 없이 아래 지정된 JSON 규격으로 반환해줘.` },
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: base64Data
             }
           }
-        };
+        ] 
+      }],
+      generationConfig: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            "name": { type: "STRING", description: "검색 및 해독된 정확한 술 한글/영문 이름" },
+            "type": { type: "STRING", description: "주종별 상세 품종 및 세부 분류" },
+            "region": { type: "STRING", description: "생산 국가 및 정밀 상세 지역" },
+            "vintage": { type: "STRING", description: "빈티지 연도 또는 캐스크 숙성년수" },
+            "detectedCategory": { type: "STRING", description: "감지된 주종 키값 ('wine', 'whiskey', 'sake', 'beer' 중 하나)" },
+            "isCodeDetected": { type: "BOOLEAN", description: "수기 적기인증코드가 사진 내에 또렷이 발견되었는지 여부" }
+          },
+          required: ["name", "type", "region", "vintage", "detectedCategory", "isCodeDetected"]
+        }
+      }
+    };
 
     const maxRetries = 3;
     let delay = 1500;
@@ -712,21 +755,23 @@ export default function TastingApp() {
         const result = await response.json();
 
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-          const parsed = JSON.parse(result.candidates[0].content.parts[0].text);
-          setAnalysisResult(parsed);
+          const parsed = safeParseJSON(result.candidates[0].content.parts[0].text);
+          if (parsed) {
+            setAnalysisResult(parsed);
 
-          if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
-            if (LIQUOR_CONFIG[parsed.detectedCategory]) {
-              setSelectedLiquorType(parsed.detectedCategory);
-              showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
+            if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
+              if (LIQUOR_CONFIG[parsed.detectedCategory]) {
+                setSelectedLiquorType(parsed.detectedCategory);
+                showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
+              }
             }
-          }
 
-          if (shareToCommunity) {
-            if (parsed.isCodeDetected) {
-              showToast("실물 인증코드가 성공적으로 감지되었습니다! 즉시 정식인증 마크가 부여됩니다.", "success");
-            } else {
-              showToast("쪽지 코드를 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.", "info");
+            if (shareToCommunity) {
+              if (parsed.isCodeDetected) {
+                showToast("실물 인증코드가 성공적으로 감지되었습니다! 즉시 정식인증 마크가 부여됩니다.", "success");
+              } else {
+                showToast("쪽지 코드를 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.", "info");
+              }
             }
           }
           setIsAnalyzing(false);
@@ -911,6 +956,7 @@ export default function TastingApp() {
       showToast("댓글 작성에 실패했습니다.", "error");
     }
   };
+
   const handleAddReply = async (postId, commentId) => {
     if (!user || !replyInputs[commentId]?.trim()) return;
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
@@ -926,7 +972,6 @@ export default function TastingApp() {
         createdAt: Date.now()
       };
 
-      // 기존 댓글 배열을 돌면서 매칭되는 댓글의 replies 내부에 새 대댓글 누적하기
       const updatedComments = (targetPost.comments || []).map(c => {
         if (c.id === commentId) {
           return { ...c, replies: [...(c.replies || []), newReply] };
@@ -1223,7 +1268,6 @@ export default function TastingApp() {
           </div>
         </div>
 
-        {/* 🎛️ 하이엔드 서브 슬라이딩 탭바 */}
         <div className="flex bg-gray-200/70 p-1 rounded-xl border border-gray-300/30">
           <button
             onClick={() => setSubTab('lounge')}
@@ -1417,7 +1461,6 @@ export default function TastingApp() {
 
                             return (
                               <div key={c.id} className="space-y-1.5 border-b border-gray-100/50 pb-2 last:border-0">
-                                {/* 댓글 본체 */}
                                 <div className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="text-xs shrink-0">{commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}</span>
@@ -1433,7 +1476,6 @@ export default function TastingApp() {
                                   </div>
                                 </div>
 
-                                {/* 대댓글 목록 */}
                                 {(c.replies || []).map(r => {
                                   const replyStats = userStats[r.userId] || { badge: '🥚 알콜 입문자' };
                                   return (
@@ -1451,7 +1493,6 @@ export default function TastingApp() {
                                   );
                                 })}
 
-                                {/* 대댓글 입력창 */}
                                 {activeReplyBox === c.id && (
                                   <div className="ml-5 flex gap-1.5 pt-1 animate-in slide-in-from-top-2 duration-200">
                                     <input type="text" placeholder="답글 내용을 입력하세요..." value={replyInputs[c.id] || ''} onChange={(e) => setReplyInputs(p => ({ ...p, [c.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddReply(post.id, c.id)} className="flex-1 border rounded-xl px-2.5 py-1.5 bg-white text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
@@ -1488,7 +1529,7 @@ export default function TastingApp() {
             <Icon name="Search" className="w-6 h-6 mr-2 text-blue-300" /> 보틀 백과 & 시세 검색
           </h2>
           <p className="text-sm text-indigo-100 opacity-90 leading-relaxed">
-            궁금한 보틀 이름을 검색해보세요.<br />AI가 최신 웹 검색을 통해 역사, 테이스팅 노트, 그리고 최근 시세(성지 가격)를 간략히 요약해 드립니다.
+            궁금한 보틀 이름을 검색해보세요.<br />AI가 최신 웹 검색을 통해 역사, 테이스팅 노트, 그리고 최근 시세(출처 및 성지 가격)를 명확하게 정밀 요약해 드립니다.
           </p>
         </div>
 
@@ -1529,34 +1570,64 @@ export default function TastingApp() {
               </div>
 
               <div className="grid gap-3 pt-2">
-                {/* 1. 시중 평균 시세 상자 */}
+                {/* 1. 시중 평균 시세 상자 (출처 표기 완료) */}
                 <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
                   <h4 className="flex items-center text-xs font-bold text-blue-800 mb-1">
                     <Icon name="DollarSign" className="w-4 h-4 mr-1" /> 시중 평균 시세
                   </h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    {/* 🚀 AI가 배경에서 계속 실시간 시세 수집 중일 때만 미니 로딩 스피너가 빙글빙글 회전합니다! */}
-                    {searchResult.avgPrice === "실시간 시세 파악 중..." && (
-                      <Icon name="Loader2" className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+                  <div className="flex flex-col gap-1 mt-1">
+                    <div className="flex items-center gap-2">
+                      {searchResult.avgPrice === "실시간 시세 파악 중..." && (
+                        <Icon name="Loader2" className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+                      )}
+                      <p className="text-sm font-semibold text-gray-800">{searchResult.avgPrice}</p>
+                    </div>
+                    {searchResult.avgPriceSource && searchResult.avgPriceSource !== "정보없음" && (
+                      <p className="text-[10px] text-gray-400 font-bold block mt-0.5">출처: {searchResult.avgPriceSource}</p>
                     )}
-                    <p className="text-sm font-semibold text-gray-800">{searchResult.avgPrice}</p>
                   </div>
                 </div>
 
-                {/* 2. 최근 성지/할인 정보 상자 */}
+                {/* 2. 최근 성지/할인 정보 상자 (출처 표기 완료) */}
                 <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
                   <h4 className="flex items-center text-xs font-bold text-amber-800 mb-1">
                     <Icon name="MapPin" className="w-4 h-4 mr-1" /> 최근 성지/할인 정보
                   </h4>
-                  <div className="flex items-center gap-2 mt-1">
-                    {/* 🚀 성지 정보를 긁어오는 동안 미니 로딩 스피너 장착 */}
-                    {searchResult.bargainInfo === "최저가 정보 수집 중..." && (
-                      <Icon name="Loader2" className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+                  <div className="flex flex-col gap-1 mt-1">
+                    <div className="flex items-center gap-2">
+                      {searchResult.bargainInfo === "최저가 정보 수집 중..." && (
+                        <Icon name="Loader2" className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+                      )}
+                      <p className="text-sm font-semibold text-gray-800">{searchResult.bargainInfo}</p>
+                    </div>
+                    {searchResult.bargainInfoSource && searchResult.bargainInfoSource !== "정보없음" && (
+                      <p className="text-[10px] text-gray-400 font-bold block mt-0.5">출처: {searchResult.bargainInfoSource}</p>
                     )}
-                    <p className="text-sm font-semibold text-gray-800">{searchResult.bargainInfo}</p>
                   </div>
                 </div>
               </div>
+
+              {/* [신규 하이엔드 인스펙터] 구글 검색 참조 실거래 웹 사이트 URL 직접 연동 배지 */}
+              {searchResult.sources && searchResult.sources.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <h5 className="text-[11px] font-bold text-gray-400 mb-2 flex items-center gap-1.5">
+                    <Icon name="ShieldCheck" className="w-3.5 h-3.5 text-emerald-500" /> 실시간 실거래 검색 참조 링크
+                  </h5>
+                  <div className="flex flex-wrap gap-1.5">
+                    {searchResult.sources.slice(0, 3).map((src, idx) => (
+                      <a 
+                        key={idx} 
+                        href={src.uri} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-[10px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg border border-indigo-100 font-semibold max-w-full truncate block transition-all hover:scale-[1.02]"
+                      >
+                        🔗 {src.title || "참조 실거래 사이트"}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
 
             </div>
           </div>
@@ -1564,7 +1635,6 @@ export default function TastingApp() {
       </div>
     );
   };
-
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans pb-10">
@@ -1833,7 +1903,6 @@ export default function TastingApp() {
 
                       return (
                         <div key={c.id} className="space-y-1.5 border-b border-gray-100/50 pb-2 last:border-0">
-                          {/* 댓글 본체 */}
                           <div className="text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="text-xs shrink-0">{commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}</span>
@@ -1849,7 +1918,6 @@ export default function TastingApp() {
                             </div>
                           </div>
 
-                          {/* 대댓글 목록 */}
                           {(c.replies || []).map(r => {
                             const replyStats = userStats[r.userId] || { badge: '🥚 알콜 입문자' };
                             return (
@@ -1867,7 +1935,6 @@ export default function TastingApp() {
                             );
                           })}
 
-                          {/* 대댓글 입력창 */}
                           {activeReplyBox === c.id && (
                             <div className="ml-5 flex gap-1.5 pt-1 animate-in slide-in-from-top-2 duration-200">
                               <input type="text" placeholder="답글 내용을 입력하세요..." value={replyInputs[c.id] || ''} onChange={(e) => setReplyInputs(p => ({ ...p, [c.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddReply(selectedDetailNote.id, c.id)} className="flex-1 border rounded-xl px-2.5 py-1.5 bg-white text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
