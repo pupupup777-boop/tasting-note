@@ -699,13 +699,15 @@ export default function TastingApp() {
             text: `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
             현재 선택한 주종 카테고리는 '${config.name}'입니다.
             
-            [요구사항]
-            1. 이미지 내 주류 라벨을 정독하여 정확한 브랜드/술 명칭(한글과 영문 병기), 분류를 추출하세요.
-            2. 생산지와 빈티지(생산년도 또는 숙성년도)를 파악하세요.
-            3. 실제 술병이 현재 선택한 주종('${selectedLiquorType}')과 다를 경우, 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer')을 추론해 'detectedCategory'에 담으세요.
-            4. 사진 속에 자필로 적은 인증코드 '${verificationCode}' 텍스트가 식별된다면 'isCodeDetected'를 true로, 없으면 false로 판별하세요.
-            
-            JSON 규격에 맞춰 다른 설명 없이 출력하세요.` 
+            반드시 아래 지정된 마크다운 없는 순수 JSON 양식에만 정확히 맞춰서 응답해 주세요. 다른 설명글이나 머리말은 일절 배제하세요:
+            {
+              "name": "추출된 주류의 정확한 한글 및 영문 명칭",
+              "type": "상세 품종 및 분류 정보",
+              "region": "생산 국가 및 정밀 상세 지역",
+              "vintage": "빈티지 연도 또는 숙성 년수 (없으면 '정보없음')",
+              "detectedCategory": "실제 주종에 맞춰 'wine', 'whiskey', 'sake', 'beer' 중 하나 선택",
+              "isCodeDetected": 사진 속에 수기나 쪽지로 적힌 '${verificationCode}' 코드가 또렷이 보인다면 true, 아니면 false (불리언 값으로 입력)"
+            }`
           },
           {
             inlineData: {
