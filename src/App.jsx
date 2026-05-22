@@ -1509,16 +1509,35 @@ export default function TastingApp() {
               </div>
 
               <div className="grid gap-3 pt-2">
+                {/* 1. 시중 평균 시세 상자 */}
                 <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
-                  <h4 className="flex items-center text-xs font-bold text-blue-800 mb-1"><Icon name="DollarSign" className="w-4 h-4 mr-1" /> 시중 평균 시세</h4>
-                  <p className="text-sm font-medium text-gray-800">{searchResult.avgPrice}</p>
+                  <h4 className="flex items-center text-xs font-bold text-blue-800 mb-1">
+                    <Icon name="DollarSign" className="w-4 h-4 mr-1" /> 시중 평균 시세
+                  </h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    {/* 🚀 AI가 배경에서 계속 실시간 시세 수집 중일 때만 미니 로딩 스피너가 빙글빙글 회전합니다! */}
+                    {searchResult.avgPrice === "실시간 시세 파악 중..." && (
+                      <Icon name="Loader2" className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+                    )}
+                    <p className="text-sm font-semibold text-gray-800">{searchResult.avgPrice}</p>
+                  </div>
                 </div>
 
+                {/* 2. 최근 성지/할인 정보 상자 */}
                 <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
-                  <h4 className="flex items-center text-xs font-bold text-amber-800 mb-1"><Icon name="MapPin" className="w-4 h-4 mr-1" /> 최근 성지/할인 정보</h4>
-                  <p className="text-sm font-medium text-gray-800">{searchResult.bargainInfo}</p>
+                  <h4 className="flex items-center text-xs font-bold text-amber-800 mb-1">
+                    <Icon name="MapPin" className="w-4 h-4 mr-1" /> 최근 성지/할인 정보
+                  </h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    {/* 🚀 성지 정보를 긁어오는 동안 미니 로딩 스피너 장착 */}
+                    {searchResult.bargainInfo === "최저가 정보 수집 중..." && (
+                      <Icon name="Loader2" className="w-4 h-4 animate-spin text-amber-600 shrink-0" />
+                    )}
+                    <p className="text-sm font-semibold text-gray-800">{searchResult.bargainInfo}</p>
+                  </div>
                 </div>
               </div>
+
             </div>
           </div>
         )}
