@@ -756,7 +756,11 @@ export default function TastingApp() {
           continue;
         }
 
-        if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error(`Gemini API 에러 상세: ${response.status} - ${errText}`);
+          throw new Error(`API failed: ${response.status}`);
+        }
         const result = await response.json();
 
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
@@ -784,10 +788,11 @@ export default function TastingApp() {
         } else {
           throw new Error("Empty response parts");
         }
-      } catch (err) {
+      } catch (err: any) {
+        console.error("라벨 분석 중 실제 발생한 에러:", err);
         if (i === maxRetries - 1) {
-          setError("구글 서버 과부하로 인해 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요.");
-          showToast("라벨 분석 실패: 서버 과부하", "error");
+          setError(`분석 지연 또는 네트워크 오류가 발생했습니다. (원인: ${err.message || 'Timeout'})`);
+          showToast("라벨 분석 실패", "error");
           setIsAnalyzing(false);
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
