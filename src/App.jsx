@@ -514,7 +514,7 @@ export default function TastingApp() {
               위 지침에 맞춰 이 술의 역사적 특징, 테이스팅 노트(향과 맛), 그리고 정제된 시세를 지정된 JSON 구조로 반환해줘.
             ` }]
           }],
-          tools: [{ "google_search": {} }],
+          tools: [{ "googleSearch": {} }],
           generationConfig: {
             responseMimeType: "application/json",
             responseSchema: {
