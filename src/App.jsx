@@ -492,12 +492,54 @@ export default function TastingApp() {
     setIsSearching(true);
     setSearchResult(null);
 
+    // 🚀 [1단계] 초고속 기본 정보 가져오기 (Google Search 도구 OFF -> 0.3초 초고속 출력)
+    try {
+      const basicPayload = {
+        contents: [{
+          role: "user",
+          parts: [{
+            text: `"${searchQuery}" 술의 한글/영문 공식 명칭, 역사와 특징 요약(1~2줄), 그리고 주요 테이스팅 노트(아로마, 팔레트, 피니시)를 아래 지정된 JSON 규격으로 알려줘. 다른 설명 없이 오직 JSON만 반환해야 해.
+            {
+              "name": "술 공식 명칭",
+              "summary": "역사 및 특징 요약",
+              "tasting": "아로마, 팔레트, 피니시 특징"
+            }`
+          }]
+        }],
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      };
+
+      const basicResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(basicPayload)
+      });
+
+      if (basicResponse.ok) {
+        const basicResult = await basicResponse.json();
+        if (basicResult.candidates?.[0]?.content?.parts?.[0]?.text) {
+          const parsedBasic = JSON.parse(basicResult.candidates[0].content.parts[0].text);
+          // 1차 화면 즉시 노출 (시세와 할인 칸은 로딩중 애니메이션 상태로 대기)
+          setSearchResult({
+            ...parsedBasic,
+            avgPrice: "실시간 시세 파악 중...",
+            bargainInfo: "최저가 정보 수집 중..."
+          });
+        }
+      }
+    } catch (basicErr) {
+      console.error("Basic info fetch error:", basicErr);
+    }
+
+    // 🚀 [2단계] 실시간 정밀 시세 검색하기 (Google Search 도구 ON -> 정교한 웹 크롤링)
     const maxRetries = 3;
     let delay = 1500;
 
     for (let i = 0; i < maxRetries; i++) {
       try {
-        const payload = {
+        const pricePayload = {
           contents: [{
             role: "user",
             parts: [{
@@ -505,62 +547,67 @@ export default function TastingApp() {
                 검색 대상 주류: "${searchQuery}"
                 
                 [필수 검색 지침]
-                1. 가격 및 시세 정보를 수집할 때, 최신 웹 검색 결과를 바탕으로 오직 아래 두 군데의 실거래 정보 및 가격 언급을 최우선 기준으로 삼으세요:
-                   - 네이버 카페 '와인싸게사는곳(와쌉)' 유저 구매 후기 및 성지 정보
-                   - 주류 스마트오더 플랫폼 '데일리샷' 가격
-                2. 가격 정보는 맹신할 수 있는 단일 숫자가 아닌, 유저들이 실제로 접근 가능한 '대략적인 가격 범위(예: 150,000원 ~ 175,000원)' 형태로 포맷팅해 주어야 합니다.
-                3. 만약 위 두 개의 출처(와쌉 카페, 데일리샷)에서 해당 주류에 대한 명확한 실거래 언급이나 시세 흔적을 도저히 찾을 수 없다면, 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
+                1. 최신 웹 검색 결과를 바탕으로 국내 주류 스마트오더 플랫폼 '데일리샷' 최신 소매가와 네이버 카페 '와인싸게사는곳(와쌉)' 등의 실제 유저 거래 시세를 파악하세요.
+                2. 가격 정보는 맹신적인 한 가지 숫자가 아닌, 유저들이 실제로 접근 가능한 대략적인 가격대 범위(예: 150,000원 ~ 175,000원 부근)로 산출하세요.
+                3. 만약 국내 웹상에서 명확한 실거래 시세나 정보 흔적을 도저히 찾을 수 없다면 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
                 
-                [출력 형식 가이드 - 필수]
-                반드시 아래 구조의 순수한 JSON 데이터만 반환해야 합니다. 앞뒤에 \`\`\`json 이나 \`\`\` 같은 마크다운 기호를 절대 붙이지 말고, 오직 중괄호 { } 로만 시작해서 끝나도록 생 JSON 문자열만 출력하세요.
-                
+                위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 데이터만 반환해줘:
                 {
-                  "name": "검색된 정확한 술 한글 및 영문 명칭",
-                  "summary": "역사와 특징을 1~2줄로 압축한 요약",
-                  "tasting": "아로마, 팔레트, 피니시 주요 특징",
-                  "avgPrice": "대략적인 평균 가격대 범위 (데이터가 없으면 '정보없음')",
-                  "bargainInfo": "와쌉 성지 매장 혹은 데일리샷 특가 기준의 대략적인 특가 범위 정보 (데이터가 없으면 '정보없음')"
+                  "avgPrice": "평균 소매 최저가 범위 (없으면 '정보없음')",
+                  "bargainInfo": "성지 매장 행사 또는 스마트오더 특가 범위 정보 (없으면 '정보없음')"
                 }
               `
             }]
           }],
-          tools: [{ "googleSearch": {} }]
+          tools: [{ "googleSearch": {} }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
         };
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+        const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(pricePayload)
         });
 
-        if (response.status === 503 && i < maxRetries - 1) {
-          showToast(`⚠️ 구글 서버 혼잡으로 재시도 중입니다... (${i + 1}/${maxRetries}회)`, "info");
+        if (priceResponse.status === 503 && i < maxRetries - 1) {
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2;
           continue;
         }
 
-        if (!response.ok) throw new Error(`API call failed: ${response.status}`);
-        const result = await response.json();
-
-        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-          setSearchResult(JSON.parse(result.candidates[0].content.parts[0].text));
-          break;
-        } else {
-          throw new Error("Empty response parts");
+        if (priceResponse.ok) {
+          const priceResult = await priceResponse.json();
+          if (priceResult.candidates?.[0]?.content?.parts?.[0]?.text) {
+            const parsedPrice = JSON.parse(priceResult.candidates[0].content.parts[0].text);
+            // 기존 1차 출력 결과에 최신 시세 데이터만 부드럽게 병합(Merge)하여 업데이트!
+            setSearchResult(prev => ({
+              ...prev,
+              avgPrice: parsedPrice.avgPrice || "정보없음",
+              bargainInfo: parsedPrice.bargainInfo || "정보없음"
+            }));
+            break; // 성공했으므로 재시도 루프 탈출
+          }
         }
-      } catch (err) {
+      } catch (priceErr) {
         if (i === maxRetries - 1) {
-          showToast("서버 과부하로 검색이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
-          console.error(err);
+          // 3번 모두 최종 실패했을 때 안전하게 '정보없음'으로 가드 처리
+          setSearchResult(prev => ({
+            ...prev,
+            avgPrice: prev?.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev?.avgPrice,
+            bargainInfo: prev?.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev?.bargainInfo
+          }));
+          console.error("Price fetch failed:", priceErr);
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2;
         }
-      } finally {
-        if (i === maxRetries - 1) setIsSearching(false);
       }
     }
+
+    // ⚡ [버그 완치 핵심] 검색 작업이 모두 끝나면 성공/실패 여부 상관없이 돋보기 회전 상태를 반드시 오프시킵니다!
+    setIsSearching(false);
   };
 
   const triggerFileInput = () => fileInputRef.current?.click();
