@@ -538,73 +538,87 @@ export default function TastingApp() {
     let delay = 1500;
 
     for (let i = 0; i < maxRetries; i++) {
-      try {
-        const pricePayload = {
-          contents: [{
-            role: "user",
-            parts: [{
-              text: `
-                검색 대상 주류: "${searchQuery}"
-                
-                [필수 검색 지침]
-                1. 최신 웹 검색 결과를 바탕으로 국내 주류 스마트오더 플랫폼 '데일리샷' 최신 소매가와 네이버 카페 '와인싸게사는곳(와쌉)' 등의 실제 유저 거래 시세를 파악하세요.
-                2. 가격 정보는 맹신적인 한 가지 숫자가 아닌, 유저들이 실제로 접근 가능한 대략적인 가격대 범위(예: 150,000원 ~ 175,000원 부근)로 산출하세요.
-                3. 만약 국내 웹상에서 명확한 실거래 시세나 정보 흔적을 도저히 찾을 수 없다면 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
-                
-                위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 데이터만 반환해줘:
-                {
-                  "avgPrice": "평균 소매 최저가 범위 (없으면 '정보없음')",
-                  "bargainInfo": "성지 매장 행사 또는 스마트오더 특가 범위 정보 (없으면 '정보없음')"
+            try {
+              const pricePayload = {
+                contents: [{
+                  role: "user",
+                  parts: [{
+                    text: `
+                      검색 대상 주류: "${searchQuery}"
+                      
+                      [필수 검색 지침]
+                      1. 최신 웹 검색 결과를 바탕으로 국내 주류 스마트오더 플랫폼 '데일리샷' 최신 소매가와 네이버 카페 '와인싸게사는곳(와쌉)' 등의 실제 유저 거래 시세를 파악하세요.
+                      2. 가격 정보는 맹신적인 한 가지 숫자가 아닌, 유저들이 실제로 접근 가능한 대략적인 가격대 범위(예: 150,000원 ~ 175,000원 부근)로 산출하세요.
+                      3. 만약 국내 웹상에서 명확한 실거래 시세나 정보 흔적을 도저히 찾을 수 없다면 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
+                      
+                      위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 데이터만 반환해줘:
+                      {
+                        "avgPrice": "평균 소매 최저가 범위 (없으면 '정보없음')",
+                        "bargainInfo": "성지 매장 행사 또는 스마트오더 특가 범위 정보 (없으면 '정보없음')"
+                      }
+                    `
+                  }]
+                }],
+                // 🟢 REST API용 정석 snake_case 규격 "google_search" 완치!
+                tools: [{ "google_search": {} }],
+                generationConfig: {
+                  responseMimeType: "application/json"
                 }
-              `
-            }]
-          }],
-          tools: [{ "googleSearch": {} }],
-          generationConfig: {
-            responseMimeType: "application/json"
+              };
+
+              // 🚀 [해결책 1] 구글 검색 봇이 렉 걸려 멈췄을 때 하염없이 대기하지 않도록 8초 타임아웃 연결장치 이식!
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 8000); 
+
+              const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(pricePayload),
+                signal: controller.signal // 타임아웃 신호 연결
+              });
+              
+              clearTimeout(timeoutId); // 성공 시 타임아웃 타이머 해제
+
+              if (priceResponse.status === 503 && i < maxRetries - 1) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2;
+                continue;
+              }
+
+              // 🟢 에러를 명시적으로 던져서 무한 대기 버그(Silent Loop Fail)를 철저히 차단
+              if (!priceResponse.ok) {
+                throw new Error(`Price API failed with status ${priceResponse.status}`);
+              }
+
+              const priceResult = await priceResponse.json();
+              if (priceResult.candidates?.[0]?.content?.parts?.[0]?.text) {
+                const parsedPrice = JSON.parse(priceResult.candidates[0].content.parts[0].text);
+                // 1차 즉시 출력되었던 화면에 최신 시세 데이터만 부드럽게 Merge 병합!
+                setSearchResult(prev => ({
+                  ...prev,
+                  avgPrice: parsedPrice.avgPrice || "정보없음",
+                  bargainInfo: parsedPrice.bargainInfo || "정보없음"
+                }));
+                break; // 시세 매칭 성공 즉시 탈출
+              } else {
+                // 🚀 [해결책 2] 구글 서버가 성공은 했는데 껍데기만 돌려줬을 때, 무한 대기하지 않고 에러를 강제 발생시켜 '정보없음'으로 안전하게 넘어가게 유도!
+                throw new Error("Empty text candidate from Price API");
+              }
+            } catch (priceErr) {
+              if (i === maxRetries - 1) {
+                // 최종 3회차 실패 시 뱅글이를 정지시키며 "정보없음" 가드 처리 발동
+                setSearchResult(prev => ({
+                  ...prev,
+                  avgPrice: prev?.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev?.avgPrice,
+                  bargainInfo: prev?.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev?.bargainInfo
+                }));
+                console.error("Price fetch failed after retries:", priceErr);
+              } else {
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2;
+              }
+            }
           }
-        };
-
-        const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(pricePayload)
-        });
-
-        if (priceResponse.status === 503 && i < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-          continue;
-        }
-
-        if (priceResponse.ok) {
-          const priceResult = await priceResponse.json();
-          if (priceResult.candidates?.[0]?.content?.parts?.[0]?.text) {
-            const parsedPrice = JSON.parse(priceResult.candidates[0].content.parts[0].text);
-            // 기존 1차 출력 결과에 최신 시세 데이터만 부드럽게 병합(Merge)하여 업데이트!
-            setSearchResult(prev => ({
-              ...prev,
-              avgPrice: parsedPrice.avgPrice || "정보없음",
-              bargainInfo: parsedPrice.bargainInfo || "정보없음"
-            }));
-            break; // 성공했으므로 재시도 루프 탈출
-          }
-        }
-      } catch (priceErr) {
-        if (i === maxRetries - 1) {
-          // 3번 모두 최종 실패했을 때 안전하게 '정보없음'으로 가드 처리
-          setSearchResult(prev => ({
-            ...prev,
-            avgPrice: prev?.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev?.avgPrice,
-            bargainInfo: prev?.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev?.bargainInfo
-          }));
-          console.error("Price fetch failed:", priceErr);
-        } else {
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-        }
-      }
-    }
 
     // ⚡ [버그 완치 핵심] 검색 작업이 모두 끝나면 성공/실패 여부 상관없이 돋보기 회전 상태를 반드시 오프시킵니다!
     setIsSearching(false);
