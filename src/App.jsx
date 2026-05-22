@@ -514,16 +514,15 @@ export default function TastingApp() {
     setIsSearching(true);
     setSearchResult(null);
 
-    // 오타가 수정된 이름을 저장할 변수 (기본값은 검색어)
     let correctedName = searchQuery;
 
-    // [1단계] 초고속 오타 교정 및 기본 정보 가져오기 (0.3초 쾌속 응답 타겟팅)
+    // [1단계] 초고속 오타 교정 및 기본 정보 가져오기
     try {
       const basicPayload = {
         contents: [{
           role: "user",
           parts: [{
-            text: `"${searchQuery}" 술의 한글/영문 공식 명칭, 역사와 특징 요약(1~2줄), 그리고 주요 테이스팅 노트(아로마, 팔레트, 피니시)를 아래 지정된 JSON 규격으로 알려줘.
+            text: `"${searchQuery}" 술의 한글/영문 공식 명칭, 역사와 특징 요약(1~2줄), 그리고 주요 테이스팅 노트(아로마, 팔레트, 피니시)를 아래 지정된 JSON 규격으로 알려줘. 
             중요: 키보드 오타 혹은 변환오타(예: qkfqpsl12년 -> 발베니 12년)가 있는 경우에도 반드시 가장 유력한 정상 한글 술 이름으로 복원해서 "name" 필드에 채워주세요. 다른 설명 없이 오직 JSON만 반환해야 해.
             {
               "name": "술 공식 명칭",
@@ -549,7 +548,7 @@ export default function TastingApp() {
           const parsedBasic = safeParseJSON(basicResult.candidates[0].content.parts[0].text);
           if (parsedBasic) {
             if (parsedBasic.name) {
-              correctedName = parsedBasic.name; // 교정된 이름을 2단계 검색용 변수에 업데이트
+              correctedName = parsedBasic.name;
             }
             setSearchResult({
               ...parsedBasic,
@@ -637,7 +636,6 @@ export default function TastingApp() {
           }
 
           if (parsedPrice) {
-            // 출처 텍스트에 부합하는 웹사이트 실제 참조 링크를 찾아 매핑하는 로직
             const findLink = (sourceName) => {
               if (!sourceName || sourceName === '정보없음') return null;
               const lowerSrc = sourceName.toLowerCase();
@@ -668,8 +666,26 @@ export default function TastingApp() {
         } else {
           throw new Error("Empty text candidate from Price API");
         }
+      } catch (priceErr) {
+        if (i === maxRetries - 1) {
+          setSearchResult(prev => ({
+            ...prev,
+            avgPrice: prev?.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev?.avgPrice,
+            avgPriceSource: prev?.avgPriceSource === "출처 확인 중..." ? "정보없음" : prev?.avgPriceSource,
+            bargainInfo: prev?.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev?.bargainInfo,
+            bargainInfoSource: prev?.bargainInfoSource === "출처 확인 중..." ? "정보없음" : prev?.bargainInfoSource,
+            sources: []
+          }));
+          console.error("Price fetch failed:", priceErr);
+        } else {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
+      }
+    }
 
-
+    setIsSearching(false);
+  };
   const triggerFileInput = () => fileInputRef.current?.click();
 
   const handleImageUpload = (e) => {
@@ -698,10 +714,11 @@ export default function TastingApp() {
 
     // 라벨 자체의 비주얼 이미지 분석 및 수기 적기인증 OCR을 수행하기 위한 멀티모달 정교한 페이로드 설계
     const payload = {
-      contents: [{ 
-        role: "user", 
+      contents: [{
+        role: "user",
         parts: [
-          { text: `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
+          {
+            text: `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
           현재 선택한 주종 카테고리는 '${config.name}'입니다.
           
           [이미지 정밀 해독 요구]
@@ -719,9 +736,9 @@ export default function TastingApp() {
               data: base64Data
             }
           }
-        ] 
+        ]
       }],
-      generationConfig: { 
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: {
           type: "OBJECT",
@@ -788,10 +805,11 @@ export default function TastingApp() {
         } else {
           throw new Error("Empty response parts");
         }
-      } catch (err: any) {
+      } catch (err) {
+        // : any를 지우고 자바스크립트 표준 문법으로 변경합니다.
         console.error("라벨 분석 중 실제 발생한 에러:", err);
         if (i === maxRetries - 1) {
-          setError(`분석 지연 또는 네트워크 오류가 발생했습니다. (원인: ${err.message || 'Timeout'})`);
+          setError(`분석 지연 또는 네트워크 오류가 발생했습니다. (원인: ${err?.message || 'Timeout'})`);
           showToast("라벨 분석 실패", "error");
           setIsAnalyzing(false);
         } else {
@@ -1641,11 +1659,11 @@ export default function TastingApp() {
                   </h5>
                   <div className="flex flex-wrap gap-1.5">
                     {searchResult.sources.slice(0, 3).map((src, idx) => (
-                      <a 
-                        key={idx} 
-                        href={src.uri} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
+                      <a
+                        key={idx}
+                        href={src.uri}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="text-[10px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg border border-indigo-100 font-semibold max-w-full truncate block transition-all hover:scale-[1.02]"
                       >
                         🔗 {src.title || "참조 실거래 사이트"}
