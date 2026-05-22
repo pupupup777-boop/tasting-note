@@ -514,13 +514,17 @@ export default function TastingApp() {
     setIsSearching(true);
     setSearchResult(null);
 
-    // [1단계] 초고속 기본 정보 가져오기 (0.3초 쾌속 응답 타겟팅)
+    // 오타가 수정된 이름을 저장할 변수 (기본값은 검색어)
+    let correctedName = searchQuery;
+
+    // [1단계] 초고속 오타 교정 및 기본 정보 가져오기 (0.3초 쾌속 응답 타겟팅)
     try {
       const basicPayload = {
         contents: [{
           role: "user",
           parts: [{
-            text: `"${searchQuery}" 술의 한글/영문 공식 명칭, 역사와 특징 요약(1~2줄), 그리고 주요 테이스팅 노트(아로마, 팔레트, 피니시)를 아래 지정된 JSON 규격으로 알려줘. 다른 설명 없이 오직 JSON만 반환해야 해.
+            text: `"${searchQuery}" 술의 한글/영문 공식 명칭, 역사와 특징 요약(1~2줄), 그리고 주요 테이스팅 노트(아로마, 팔레트, 피니시)를 아래 지정된 JSON 규격으로 알려줘.
+            중요: 키보드 오타 혹은 변환오타(예: qkfqpsl12년 -> 발베니 12년)가 있는 경우에도 반드시 가장 유력한 정상 한글 술 이름으로 복원해서 "name" 필드에 채워주세요. 다른 설명 없이 오직 JSON만 반환해야 해.
             {
               "name": "술 공식 명칭",
               "summary": "역사 및 특징 요약",
@@ -544,6 +548,9 @@ export default function TastingApp() {
         if (basicResult.candidates?.[0]?.content?.parts?.[0]?.text) {
           const parsedBasic = safeParseJSON(basicResult.candidates[0].content.parts[0].text);
           if (parsedBasic) {
+            if (parsedBasic.name) {
+              correctedName = parsedBasic.name; // 교정된 이름을 2단계 검색용 변수에 업데이트
+            }
             setSearchResult({
               ...parsedBasic,
               avgPrice: "실시간 시세 파악 중...",
@@ -559,7 +566,7 @@ export default function TastingApp() {
       console.error("Basic info fetch error:", basicErr);
     }
 
-    // [2단계] 실시간 정밀 시세 검색하기 (구글 서치봇 활성화)
+    // [2단계] 교정된 명칭으로 최적화 채널(데일리샷, 네이버 쇼핑, 엑스와인) 실시간 검색
     const maxRetries = 3;
     let delay = 1500;
 
@@ -570,25 +577,25 @@ export default function TastingApp() {
             role: "user",
             parts: [{
               text: `
-                검색 대상 주류: "${searchQuery}"
+                검색 대상 주류: "${correctedName}"
                 
                 [필수 검색 지침]
-                1. 최신 웹 검색 결과를 바탕으로 국내 주류 스마트오더 플랫폼 '데일리샷' 최신 소매가와 네이버 카페 '와인싸게사는곳(와쌉)' 등의 실제 유저 거래 시세를 파악하세요.
-                2. 중요: 가격 정보("avgPrice", "bargainInfo")에는 다른 수식어, 줄글, 설명("부근", "형성되어 있습니다" 등)을 일체 배제하고 오직 숫자 가격 범위 포맷만 기재하세요. (예: "1,000,000원 ~ 1,300,000원")
+                1. 최신 웹 검색 결과를 바탕으로 오직 국내 플랫폼인 '데일리샷', '네이버 쇼핑 가격비교', '엑스와인(X-wine)' 3곳의 실거래 가격대 정보만 확인하세요.
+                2. 가격 정보("avgPrice", "bargainInfo")에는 사족이나 설명글(예: "부근에 거래됩니다", "형성되어 있습니다")을 완벽히 제외하고, 오직 숫자 가격 범위 포맷만 기재하세요. (예: "1,000,000원 ~ 1,300,000원")
                 3. 만약 국내 웹상에서 명확한 실거래 시세를 찾을 수 없다면 "정보없음"이라고 기입하세요.
-                4. 해당 평균 시세와 할인 정보의 '출처' 플랫폼/커뮤니티 이름도 아래 규격에 명시해 주세요. (예: 데일리샷, 와쌉, 데일리샷 스마트오더 등)
+                4. 시세 정보의 '출처' 플랫폼 이름도 아래 규격에 정밀하게 명시해 주세요. (예: 데일리샷, 네이버 쇼핑, 엑스와인 등)
                 
                 위 지침에 맞춰 아래 지정된 JSON 규격으로 시세 및 출처 데이터만 정확하게 반환해줘:
                 {
-                  "avgPrice": "숫자 가격 범위만 (예: 100,000원 ~ 120,000원)",
+                  "avgPrice": "가격 범위만 (예: 100,000원 ~ 120,000원)",
                   "avgPriceSource": "출처 이름 (예: 데일리샷)",
-                  "bargainInfo": "숫자 가격 범위만 (예: 95,000원 ~ 105,000원)",
-                  "bargainInfoSource": "출처 이름 (예: 와쌉)"
+                  "bargainInfo": "가격 범위만 (예: 95,000원 ~ 105,000원)",
+                  "bargainInfoSource": "출처 이름 (예: 네이버 쇼핑)"
                 }
               `
             }]
           }],
-          tools: [{ "google_search": {} }] // 표준 google_search 스펙 준수
+          tools: [{ "google_search": {} }]
         };
 
         const controller = new AbortController();
@@ -619,7 +626,6 @@ export default function TastingApp() {
         if (candidate?.content?.parts?.[0]?.text) {
           const parsedPrice = safeParseJSON(candidate.content.parts[0].text);
           
-          // 실시간 구글 서칭 뉴스/블로그/쇼핑몰 어트리뷰션 출처(Citations) 추출
           let groundings = [];
           if (candidate.groundingMetadata && candidate.groundingMetadata.groundingAttributions) {
             groundings = candidate.groundingMetadata.groundingAttributions
@@ -631,12 +637,30 @@ export default function TastingApp() {
           }
 
           if (parsedPrice) {
+            // 출처 텍스트에 부합하는 웹사이트 실제 참조 링크를 찾아 매핑하는 로직
+            const findLink = (sourceName) => {
+              if (!sourceName || sourceName === '정보없음') return null;
+              const lowerSrc = sourceName.toLowerCase();
+              const match = groundings.find(g => {
+                const url = g.uri.toLowerCase();
+                const title = g.title.toLowerCase();
+                return url.includes(lowerSrc) || title.includes(lowerSrc) ||
+                       (lowerSrc.includes('데일리샷') && url.includes('dailyshot')) ||
+                       (lowerSrc.includes('네이버') && url.includes('naver')) ||
+                       (lowerSrc.includes('엑스와인') && url.includes('x-wine')) ||
+                       (lowerSrc.includes('xwine') && url.includes('xwine'));
+              });
+              return match ? match.uri : (groundings[0]?.uri || null);
+            };
+
             setSearchResult(prev => ({
               ...prev,
               avgPrice: parsedPrice.avgPrice || "정보없음",
               avgPriceSource: parsedPrice.avgPriceSource || "정보없음",
+              avgPriceLink: findLink(parsedPrice.avgPriceSource),
               bargainInfo: parsedPrice.bargainInfo || "정보없음",
               bargainInfoSource: parsedPrice.bargainInfoSource || "정보없음",
+              bargainInfoLink: findLink(parsedPrice.bargainInfoSource) || groundings[1]?.uri || groundings[0]?.uri,
               sources: groundings
             }));
           }
@@ -644,26 +668,7 @@ export default function TastingApp() {
         } else {
           throw new Error("Empty text candidate from Price API");
         }
-      } catch (priceErr) {
-        if (i === maxRetries - 1) {
-          setSearchResult(prev => ({
-            ...prev,
-            avgPrice: prev?.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev?.avgPrice,
-            avgPriceSource: prev?.avgPriceSource === "출처 확인 중..." ? "정보없음" : prev?.avgPriceSource,
-            bargainInfo: prev?.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev?.bargainInfo,
-            bargainInfoSource: prev?.bargainInfoSource === "출처 확인 중..." ? "정보없음" : prev?.bargainInfoSource,
-            sources: []
-          }));
-          console.error("Price fetch failed after retries:", priceErr);
-        } else {
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-        }
-      }
-    }
 
-    setIsSearching(false);
-  };
 
   const triggerFileInput = () => fileInputRef.current?.click();
 
