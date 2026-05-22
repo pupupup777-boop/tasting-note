@@ -526,7 +526,7 @@ export default function TastingApp() {
                 "avgPrice": { type: "STRING", description: "네이버 카페 와쌉 유저 언급 및 데일리샷 기준의 대략적인 평균 가격대 범위 (데이터가 없거나 못 찾으면 반드시 '정보없음'으로 출력)" },
                 "bargainInfo": { type: "STRING", description: "와쌉 성지 매장 행사 혹은 데일리샷 특가 기준의 대략적인 특가 범위 정보 (전혀 알 수 없다면 '정보없음'으로 출력)" }
               },
-              required: ["name", "summary", "taining", "avgPrice", "bargainInfo"]
+              required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
             }
           }
         };
