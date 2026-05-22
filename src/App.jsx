@@ -560,7 +560,7 @@ export default function TastingApp() {
                   }]
                 }],
                 // 🟢 REST API용 정석 snake_case 규격 "google_search" 완치!
-                tools: [{ "googleSearch": {} }],
+                tools: [{ "google_search": {} }],
                 generationConfig: {
                   responseMimeType: "application/json"
                 }
@@ -619,6 +619,7 @@ export default function TastingApp() {
               }
             }
           }
+
 
     // ⚡ [버그 완치 핵심] 검색 작업이 모두 끝나면 성공/실패 여부 상관없이 돋보기 회전 상태를 반드시 오프시킵니다!
     setIsSearching(false);
