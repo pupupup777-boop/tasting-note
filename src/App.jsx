@@ -559,12 +559,11 @@ export default function TastingApp() {
                     `
                   }]
                 }],
-                // 🟢 REST API용 정석 snake_case 규격 "google_search" 완치!
-                tools: [{ "google_search": {} }],
-                generationConfig: {
-                  responseMimeType: "application/json"
-                }
+                // 🟢 REST API용 정석 snake_case 규격 "googleSearch"를 완벽하게 고정 수호합니다!
+                tools: [{ "googleSearch": {} }]
+                // ⚠️ [핵심 완치] 구글 검색 봇 활성화 시 responseMimeType을 쓰면 서버가 차단됩니다. 해당 옵션을 삭제합니다.
               };
+
 
               // 🚀 [해결책 1] 구글 검색 봇이 렉 걸려 멈췄을 때 하염없이 대기하지 않도록 8초 타임아웃 연결장치 이식!
               const controller = new AbortController();
@@ -674,7 +673,7 @@ export default function TastingApp() {
               위 지침에 맞춰 아래 지정된 JSON 규격으로 데이터를 반환해줘.
             ` }] 
           }],
-          tools: [{ "google_search": {} }], // 🟢 REST API 환경에 맞춰 google_search 언더바 규격으로 원복 적용
+          tools: [{ "googleSearch": {} }], // 🟢 REST API 환경에 맞춰 googleSearch 언더바 규격으로 원복 적용
           generationConfig: { 
             responseMimeType: "application/json",
             responseSchema: {
