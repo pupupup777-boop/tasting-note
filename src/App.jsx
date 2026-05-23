@@ -1581,8 +1581,8 @@ export default function TastingApp() {
                   </div>
                   {searchResult.avgPriceSource && searchResult.avgPriceSource !== "정보없음" && (
                     <p className="text-[9px] text-gray-400 font-bold mt-1.5 pt-1.5 border-t border-blue-100/30">
-                      출처: {searchResult.sources?.[0]?.uri ? (
-                        <a href={searchResult.sources[0].uri} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline inline-flex items-center gap-0.5 font-extrabold">
+                      출처: {searchResult.avgPriceLink ? (
+                        <a href={searchResult.avgPriceLink} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-0.5 font-black bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 transition-transform active:scale-95">
                           {searchResult.avgPriceSource} 🔗
                         </a>
                       ) : (
@@ -1592,11 +1592,11 @@ export default function TastingApp() {
                   )}
                 </div>
 
-                {/* 2. 최근 성지/할인 정보 상자 */}
+                {/* 2. 최근 성지/최저가 정보 상자 */}
                 <div className="bg-amber-50/40 border border-amber-100/70 p-3.5 rounded-2xl flex flex-col justify-between">
                   <div>
                     <h4 className="flex items-center text-[11px] font-black text-amber-800 mb-1.5">
-                      <Icon name="MapPin" className="w-3.5 h-3.5 mr-1" /> 최근 성지/할인 정보
+                      <Icon name="MapPin" className="w-3.5 h-3.5 mr-1" /> 최근 성지/최저가 정보
                     </h4>
                     <div className="flex items-center gap-1.5 my-1">
                       {searchResult.bargainInfo === "최저가 정보 수집 중..." && (
@@ -1607,8 +1607,8 @@ export default function TastingApp() {
                   </div>
                   {searchResult.bargainInfoSource && searchResult.bargainInfoSource !== "정보없음" && (
                     <p className="text-[9px] text-gray-400 font-bold mt-1.5 pt-1.5 border-t border-amber-100/30">
-                      출처: {searchResult.sources?.[1]?.uri || searchResult.sources?.[0]?.uri ? (
-                        <a href={searchResult.sources[1]?.uri || searchResult.sources[0]?.uri} target="_blank" rel="noopener noreferrer" className="text-indigo-500 hover:underline inline-flex items-center gap-0.5 font-extrabold">
+                      출처: {searchResult.bargainInfoLink ? (
+                        <a href={searchResult.bargainInfoLink} target="_blank" rel="noopener noreferrer" className="text-amber-700 hover:underline inline-flex items-center gap-0.5 font-black bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 transition-transform active:scale-95">
                           {searchResult.bargainInfoSource} 🔗
                         </a>
                       ) : (
