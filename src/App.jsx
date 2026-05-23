@@ -516,19 +516,19 @@ export default function TastingApp() {
 
     let correctedName = searchQuery;
 
-    // [1단계] 초고속 오타 교정 및 기본 백과 정보 가져오기
+    // [1단계] 초고속 오타 교정 및 기본 백과 정보 가져오기 (이 단계는 검색이 없으므로 JSON 모드 사용 가능)
     try {
       const basicPayload = {
         contents: [{
           role: "user",
           parts: [{
             text: `"${searchQuery}" 술의 한글/영문 공식 명칭, 역사와 특징 요약(1~2줄), 그리고 주요 테이스팅 노트(아로마, 팔레트, 피니시)를 아래 지정된 JSON 규격으로 알려줘. 
-            중요: 키보드 오타 혹은 한영 변환 오타(예: qkfqpsl12년 -> 발베니 12년)가 있는 경우에도 반드시 가장 유력한 정상 한글 술 이름으로 완벽히 복원해서 "name" 필드에 채워주세요. 다른 설명 없이 오직 JSON만 반환해야 해.
-            {
-              "name": "술 공식 명칭",
-              "summary": "역사 및 특징 요약",
-              "tasting": "아로마, 팔레트, 피니시 특징"
-            }`
+        중요: 키보드 오타 혹은 한영 변환 오타(예: qkfqpsl12년 -> 발베니 12년)가 있는 경우에도 반드시 가장 유력한 정상 한글 술 이름으로 완벽히 복원해서 "name" 필드에 채워주세요. 다른 설명 없이 오직 JSON만 반환해야 해.
+        {
+          "name": "술 공식 명칭",
+          "summary": "역사 및 특징 요약",
+          "tasting": "아로마, 팔레트, 피니시 특징"
+        }`
           }]
         }],
         generationConfig: { responseMimeType: "application/json" }
@@ -567,35 +567,36 @@ export default function TastingApp() {
 
     for (let i = 0; i < maxRetries; i++) {
       try {
+        // ★ 핵심 해결책: tools와 responseMimeType: "application/json"을 동시에 보내면 API 에러가 나므로,
+        // 아래 payload 구성에서 generationConfig의 responseMimeType 옵션을 완전히 제거했습니다.
         const pricePayload = {
           contents: [{
             role: "user",
             parts: [{
               text: `
-                검색 주류: "${correctedName}"
-                
-                [지침]
-                1. 구글 검색 결과를 기반으로 국내 주류 채널 '데일리샷' 앱 시세와 '네이버 쇼핑 가격비교'의 최신 실거래가 정보를 수집하세요.
-                2. 가격 정보 필드("avgPrice", "bargainInfo")에는 사족, 텍스트 설명 없이 오직 숫자 범위만 기재하세요. (예: "150,000원 ~ 170,000원")
-                3. 알 수 없는 상태라면 "정보없음"으로 일관되게 반환하세요.
-                4. 매칭된 출처 플랫폼 이름("데일리샷" 또는 "네이버 쇼핑")을 명확히 명시하세요.
-                
-                오직 아래 JSON 구조만 반환하세요:
-                {
-                  "avgPrice": "가격대 범위 (예: 100,000원 ~ 120,000원)",
-                  "avgPriceSource": "출처 이름 (예: 데일리샷)",
-                  "bargainInfo": "가격대 범위 (예: 95,000원 ~ 105,000원)",
-                  "bargainInfoSource": "출처 이름 (예: 네이버 쇼핑)"
-                }
-              `
+            검색 주류: "${correctedName}"
+            
+            [지침]
+            1. 구글 검색 결과를 기반으로 국내 주류 채널 '데일리샷' 앱 시세와 '네이버 쇼핑 가격비교'의 최신 실거래가 정보를 수집하세요.
+            2. 가격 정보 필드("avgPrice", "bargainInfo")에는 사족, 텍스트 설명 없이 오직 숫자 범위만 기재하세요. (예: "150,000원 ~ 170,000원")
+            3. 알 수 없는 상태라면 "정보없음"으로 일관되게 반환하세요.
+            4. 매칭된 출처 플랫폼 이름("데일리샷" 또는 "네이버 쇼핑")을 명확히 명시하세요.
+            
+            오직 아래 JSON 구조만 반환하세요 (마크다운 코드블록 안에 넣어도 무방합니다):
+            {
+              "avgPrice": "가격대 범위 (예: 100,000원 ~ 120,000원)",
+              "avgPriceSource": "출처 이름 (예: 데일리샷)",
+              "bargainInfo": "가격대 범위 (예: 95,000원 ~ 105,000원)",
+              "bargainInfoSource": "출처 이름 (예: 네이버 쇼핑)"
+            }
+          `
             }]
           }],
-          tools: [{ "google_search": {} }],
-          generationConfig: { responseMimeType: "application/json" }
+          tools: [{ "google_search": {} }] // 구글 검색 도구 유지
         };
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000); 
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
 
         const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
@@ -603,7 +604,7 @@ export default function TastingApp() {
           body: JSON.stringify(pricePayload),
           signal: controller.signal
         });
-        
+
         clearTimeout(timeoutId);
 
         if (!priceResponse.ok) throw new Error(`Status ${priceResponse.status}`);
@@ -612,9 +613,10 @@ export default function TastingApp() {
         const candidate = priceResult.candidates?.[0];
 
         if (candidate?.content?.parts?.[0]?.text) {
+          // 이미 작성해두신 safeParseJSON 덕분에 JSON MimeType 강제가 없어도 마크다운에서 JSON을 완벽하게 추출해낼 수 있습니다!
           const parsedPrice = safeParseJSON(candidate.content.parts[0].text);
           let groundings = [];
-          
+
           if (candidate.groundingMetadata?.groundingAttributions) {
             groundings = candidate.groundingMetadata.groundingAttributions
               .map(attr => ({ uri: attr.web?.uri, title: attr.web?.title }))
@@ -628,35 +630,43 @@ export default function TastingApp() {
               const match = groundings.find(g => {
                 const url = g.uri.toLowerCase();
                 return url.includes(lowerSrc) || g.title.toLowerCase().includes(lowerSrc) ||
-                       (lowerSrc.includes('데일리샷') && url.includes('dailyshot')) ||
-                       (lowerSrc.includes('네이버') && url.includes('naver'));
+                  (lowerSrc.includes('데일리샷') && url.includes('dailyshot')) ||
+                  (lowerSrc.includes('네이버') && url.includes('naver'));
               });
               return match ? match.uri : (groundings[0]?.uri || null);
             };
 
-            setSearchResult(prev => ({
-              ...prev,
-              avgPrice: parsedPrice.avgPrice || "정보없음",
-              avgPriceSource: parsedPrice.avgPriceSource || "정보없음",
-              avgPriceLink: findLink(parsedPrice.avgPriceSource),
-              bargainInfo: parsedPrice.bargainInfo || "정보없음",
-              bargainInfoSource: parsedPrice.bargainInfoSource || "정보없음",
-              bargainInfoLink: findLink(parsedPrice.bargainInfoSource) || groundings[1]?.uri || groundings[0]?.uri,
-              sources: groundings
-            }));
+            setSearchResult(prev => {
+              if (!prev) return null; // 만약 1단계 기본 정보 로드 자체가 실패했다면 화면 표시를 막기 위해 null 유지
+              return {
+                ...prev,
+                avgPrice: parsedPrice.avgPrice || "정보없음",
+                avgPriceSource: parsedPrice.avgPriceSource || "정보없음",
+                avgPriceLink: findLink(parsedPrice.avgPriceSource),
+                bargainInfo: parsedPrice.bargainInfo || "정보없음",
+                bargainInfoSource: parsedPrice.bargainInfoSource || "정보없음",
+                bargainInfoLink: findLink(parsedPrice.bargainInfoSource) || groundings[1]?.uri || groundings[0]?.uri,
+                sources: groundings
+              };
+            });
           }
           break;
         }
       } catch (priceErr) {
+        console.warn(`시세 검색 ${i + 1}회차 실패:`, priceErr);
         if (i === maxRetries - 1) {
-          setSearchResult(prev => ({
-            ...prev,
-            avgPrice: prev?.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev?.avgPrice,
-            avgPriceSource: prev?.avgPriceSource === "출처 확인 중..." ? "정보없음" : prev?.avgPriceSource,
-            bargainInfo: prev?.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev?.bargainInfo,
-            bargainInfoSource: prev?.bargainInfoSource === "출처 확인 중..." ? "정보없음" : prev?.bargainInfoSource,
-            sources: []
-          }));
+          // 3차 시도까지 모두 실패한 경우에만 기존 1단계 백과사전 데이터를 보존하면서 시세 정보만 "정보없음"으로 안전하게 교체합니다.
+          setSearchResult(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              avgPrice: prev.avgPrice === "실시간 시세 파악 중..." ? "정보없음" : prev.avgPrice,
+              avgPriceSource: prev.avgPriceSource === "출처 확인 중..." ? "정보없음" : prev.avgPriceSource,
+              bargainInfo: prev.bargainInfo === "최저가 정보 수집 중..." ? "정보없음" : prev.bargainInfo,
+              bargainInfoSource: prev.bargainInfoSource === "출처 확인 중..." ? "정보없음" : prev.bargainInfoSource,
+              sources: prev.sources || []
+            };
+          });
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2;
@@ -738,7 +748,7 @@ export default function TastingApp() {
           console.error(`Gemini 에러 리포트: ${response.status} - ${errText}`);
           throw new Error(`API failed with status ${response.status}`);
         }
-        
+
         const result = await response.json();
         const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
