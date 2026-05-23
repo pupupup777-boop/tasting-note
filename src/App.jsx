@@ -516,19 +516,19 @@ export default function TastingApp() {
 
     let correctedName = searchQuery;
 
-    // [1단계] 초고속 오타 교정 및 기본 백과 정보 가져오기 (이 단계는 검색이 없으므로 JSON 모드 사용 가능)
+    // [1단계] 초고속 오타 교정 및 기본 백과 정보 가져오기
     try {
       const basicPayload = {
         contents: [{
           role: "user",
           parts: [{
             text: `"${searchQuery}" 술의 한글/영문 공식 명칭, 역사와 특징 요약(1~2줄), 그리고 주요 테이스팅 노트(아로마, 팔레트, 피니시)를 아래 지정된 JSON 규격으로 알려줘. 
-        중요: 키보드 오타 혹은 한영 변환 오타(예: qkfqpsl12년 -> 발베니 12년)가 있는 경우에도 반드시 가장 유력한 정상 한글 술 이름으로 완벽히 복원해서 "name" 필드에 채워주세요. 다른 설명 없이 오직 JSON만 반환해야 해.
-        {
-          "name": "술 공식 명칭",
-          "summary": "역사 및 특징 요약",
-          "tasting": "아로마, 팔레트, 피니시 특징"
-        }`
+            중요: 키보드 오타 혹은 한영 변환 오타(예: qkfqpsl12년 -> 발베니 12년)가 있는 경우에도 반드시 가장 유력한 정상 한글 술 이름으로 완벽히 복원해서 "name" 필드에 채워주세요. 다른 설명 없이 오직 JSON만 반환해야 해.
+            {
+              "name": "술 공식 명칭",
+              "summary": "역사 및 특징 요약",
+              "tasting": "아로마, 팔레트, 피니시 특징"
+            }`
           }]
         }],
         generationConfig: { responseMimeType: "application/json" }
@@ -561,42 +561,52 @@ export default function TastingApp() {
       console.error("기본 정보 매핑 실패:", basicErr);
     }
 
-    // [2단계] 국내 양대 채널 (데일리샷, 네이버 쇼핑) 실시간 타겟 서칭
+    // [2단계] 국내 양대 채널 및 오프라인 성지/편의점 스마트오더 실시간 정밀 트래킹
     const maxRetries = 3;
     let delay = 1000;
 
     for (let i = 0; i < maxRetries; i++) {
       try {
-        // ★ 핵심 해결책: tools와 responseMimeType: "application/json"을 동시에 보내면 API 에러가 나므로,
-        // 아래 payload 구성에서 generationConfig의 responseMimeType 옵션을 완전히 제거했습니다.
         const pricePayload = {
           contents: [{
             role: "user",
             parts: [{
               text: `
-            검색 주류: "${correctedName}"
-            
-            [지침]
-            1. 구글 검색 결과를 기반으로 국내 주류 채널 '데일리샷' 앱 시세와 '네이버 쇼핑 가격비교'의 최신 실거래가 정보를 수집하세요.
-            2. 가격 정보 필드("avgPrice", "bargainInfo")에는 사족, 텍스트 설명 없이 오직 숫자 범위만 기재하세요. (예: "150,000원 ~ 170,000원")
-            3. 알 수 없는 상태라면 "정보없음"으로 일관되게 반환하세요.
-            4. 매칭된 출처 플랫폼 이름("데일리샷" 또는 "네이버 쇼핑")을 명확히 명시하세요.
-            
-            오직 아래 JSON 구조만 반환하세요 (마크다운 코드블록 안에 넣어도 무방합니다):
-            {
-              "avgPrice": "가격대 범위 (예: 100,000원 ~ 120,000원)",
-              "avgPriceSource": "출처 이름 (예: 데일리샷)",
-              "bargainInfo": "가격대 범위 (예: 95,000원 ~ 105,000원)",
-              "bargainInfoSource": "출처 이름 (예: 네이버 쇼핑)"
-            }
-          `
+                [역할 및 미션]
+                당신은 대한민국 국내 주류 시세 및 최저가 전문 탐색가입니다. 
+                구글 검색 도구(google_search)를 사용하여 "${correctedName}" 술의 최신 국내 실제 유통 가격을 매우 날카롭게 추적하세요.
+
+                [검색 전략 지침]
+                1. "평균 시세(avgPrice)": 
+                   - 데일리샷(Dailyshot), 달리(Dali), 또는 대형 편의점 앱(우리동네GS 와인25플러스, 포켓CU)에서 주로 판매되는 대중적인 일반 유통 가격대를 찾으세요.
+                   - 단일 가격(예: "115,000원")도 좋고 범위(예: "110,000원 ~ 125,000원")도 좋습니다. 발견한 단서를 그대로 적어주세요.
+
+                2. "최근 성지 및 최저가 정보(bargainInfo)":
+                   - 단순히 네이버 쇼핑 일반 가격뿐만 아니라, 국내 유명 주류 성지(남대문 주류상가 온누리가, 조양마트, 건대 스타보틀, 신풍 신세계아울렛 등)나 코스트코/이마트 트레이더스 행사 가격, 혹은 네이버 쇼핑 가격비교의 '가장 저렴한 픽업가' 정보를 찾으세요.
+                   - 블로그, 카페(위스키 코냑 클럽 등), 디시인사이드 위스키 갤러리 등의 실시간 구매 인증 글에 나오는 가격도 훌륭한 출처가 됩니다.
+                   - 예시: "98,000원 (남대문 온누리가 기준)" 혹은 "102,000원 (트레이더스 행사가)" 처럼 괄호 안에 매력적인 꿀정보나 세부 조건을 한두 마디 덧붙여 주면 유저에게 엄청난 도움이 됩니다!
+
+                3. "출처 매칭(avgPriceSource, bargainInfoSource)":
+                   - 가격을 찾은 플랫폼이나 구체적인 장소 이름을 명시하세요. (예: "데일리샷", "네이버 쇼핑 가격비교", "남대문 주류상가", "이마트 트레이더스")
+
+                4. "방어적 태도 해제":
+                   - 검색 결과에 실마리가 단 하나라도 있다면 절대 '정보없음'으로 쉽게 포기하지 말고 가장 신뢰할 만한 최근 시세를 어떻게든 채워 넣으세요. 단서가 진짜 아무것도 없을 때만 "정보없음"을 반환하세요.
+
+                오직 아래 JSON 구조로만 응답하세요:
+                {
+                  "avgPrice": "시중 평균 가격 정보 (예: 110,000원 ~ 125,000원)",
+                  "avgPriceSource": "평균가 출처 (예: 데일리샷)",
+                  "bargainInfo": "포착된 최저가/할인/성지 정보 (예: 98,000원 (남대문 온누리가 기준))",
+                  "bargainInfoSource": "최저가 출처 (예: 남대문 주류상가)"
+                }
+              `
             }]
           }],
-          tools: [{ "google_search": {} }] // 구글 검색 도구 유지
+          tools: [{ "google_search": {} }] // 실시간 검색 결합 유지
         };
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000); 
 
         const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
@@ -604,7 +614,7 @@ export default function TastingApp() {
           body: JSON.stringify(pricePayload),
           signal: controller.signal
         });
-
+        
         clearTimeout(timeoutId);
 
         if (!priceResponse.ok) throw new Error(`Status ${priceResponse.status}`);
@@ -613,10 +623,9 @@ export default function TastingApp() {
         const candidate = priceResult.candidates?.[0];
 
         if (candidate?.content?.parts?.[0]?.text) {
-          // 이미 작성해두신 safeParseJSON 덕분에 JSON MimeType 강제가 없어도 마크다운에서 JSON을 완벽하게 추출해낼 수 있습니다!
           const parsedPrice = safeParseJSON(candidate.content.parts[0].text);
           let groundings = [];
-
+          
           if (candidate.groundingMetadata?.groundingAttributions) {
             groundings = candidate.groundingMetadata.groundingAttributions
               .map(attr => ({ uri: attr.web?.uri, title: attr.web?.title }))
@@ -630,14 +639,16 @@ export default function TastingApp() {
               const match = groundings.find(g => {
                 const url = g.uri.toLowerCase();
                 return url.includes(lowerSrc) || g.title.toLowerCase().includes(lowerSrc) ||
-                  (lowerSrc.includes('데일리샷') && url.includes('dailyshot')) ||
-                  (lowerSrc.includes('네이버') && url.includes('naver'));
+                       (lowerSrc.includes('데일리샷') && url.includes('dailyshot')) ||
+                       (lowerSrc.includes('네이버') && url.includes('naver')) ||
+                       (lowerSrc.includes('티스토리') && url.includes('tistory')) ||
+                       (lowerSrc.includes('블로그') && url.includes('blog'));
               });
               return match ? match.uri : (groundings[0]?.uri || null);
             };
 
             setSearchResult(prev => {
-              if (!prev) return null; // 만약 1단계 기본 정보 로드 자체가 실패했다면 화면 표시를 막기 위해 null 유지
+              if (!prev) return null;
               return {
                 ...prev,
                 avgPrice: parsedPrice.avgPrice || "정보없음",
@@ -655,7 +666,6 @@ export default function TastingApp() {
       } catch (priceErr) {
         console.warn(`시세 검색 ${i + 1}회차 실패:`, priceErr);
         if (i === maxRetries - 1) {
-          // 3차 시도까지 모두 실패한 경우에만 기존 1단계 백과사전 데이터를 보존하면서 시세 정보만 "정보없음"으로 안전하게 교체합니다.
           setSearchResult(prev => {
             if (!prev) return null;
             return {
