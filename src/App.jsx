@@ -257,7 +257,7 @@ export default function TastingApp() {
   // 기존의 verificationCode 및 shareToCommunity 관련 중 일부는 유지하거나 단순화합니다.
   const [shareToCommunity, setShareToCommunity] = useState(false);
   const [selectedLiquorType, setSelectedLiquorType] = useState('wine');
-  
+
   // 시각 관찰 (Visual) State
   const [wineColor, setWineColor] = useState(''); // 보라색, 루비색, 가넷색, 벽돌색, 황갈색 등
   const [wineColorTone, setWineColorTone] = useState(''); // 얕은, 중간, 짙은
@@ -273,7 +273,7 @@ export default function TastingApp() {
   const [evolutionTime, setEvolutionTime] = useState(''); // 향이 열림, 균형감 변화
   const [evolutionBetter, setEvolutionBetter] = useState(''); // YES, NO
   const [foodPairing, setFoodPairing] = useState(''); // 음식 페어링 아이디어
-  
+
   const [image, setImage] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
@@ -411,7 +411,18 @@ export default function TastingApp() {
     setPersonalNotes('');
     setOverallRating(0);
     setShareToCommunity(false);
-    setVerificationCode('CODE-' + Math.floor(1000 + Math.random() * 9000));
+
+    // 신규 추가된 세부 지표 초기화
+    setWineColor('');
+    setWineColorTone('');
+    setWineClarity('');
+    setWineViscosity('');
+    setAromaIntensity('중간');
+    setFinishLength('');
+    setEvolutionFirst('');
+    setEvolutionTime('');
+    setEvolutionBetter('');
+    setFoodPairing('');
   };
 
   useEffect(() => {
@@ -626,7 +637,7 @@ export default function TastingApp() {
           body: JSON.stringify(pricePayload),
           signal: controller.signal
         });
-        
+
         clearTimeout(timeoutId);
 
         if (!priceResponse.ok) throw new Error(`Status ${priceResponse.status}`);
@@ -637,7 +648,7 @@ export default function TastingApp() {
         if (candidate?.content?.parts?.[0]?.text) {
           const parsedPrice = safeParseJSON(candidate.content.parts[0].text);
           let groundings = [];
-          
+
           if (candidate.groundingMetadata?.groundingAttributions) {
             groundings = candidate.groundingMetadata.groundingAttributions
               .map(attr => ({ uri: attr.web?.uri, title: attr.web?.title }))
@@ -651,8 +662,8 @@ export default function TastingApp() {
               const match = groundings.find(g => {
                 const url = g.uri.toLowerCase();
                 return url.includes(lowerSrc) || g.title.toLowerCase().includes(lowerSrc) ||
-                       (lowerSrc.includes('데일리샷') && url.includes('dailyshot')) ||
-                       (lowerSrc.includes('네이버') && url.includes('naver'));
+                  (lowerSrc.includes('데일리샷') && url.includes('dailyshot')) ||
+                  (lowerSrc.includes('네이버') && url.includes('naver'));
               });
               return match ? match.uri : (groundings[0]?.uri || null);
             };
@@ -726,17 +737,16 @@ export default function TastingApp() {
         role: "user",
         parts: [
           {
-            text: `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
+            text: `주류 라벨 이미지 분석 요청.
             현재 선택한 주종 카테고리는 '${config.name}'입니다.
             
             반드시 아래 지정된 마크다운 없는 순수 JSON 양식에만 정확히 맞춰서 응답해 주세요. 다른 설명글이나 머리말은 일절 배제하세요:
             {
               "name": "추출된 주류의 정확한 한글 및 영문 명칭",
-              "type": "상세 품종 및 분류 정보",
+              "type": "상세 품종 및 분류 정보 (예: 레드 와인, 싱글몰트 위스키)",
               "region": "생산 국가 및 정밀 상세 지역",
               "vintage": "빈티지 연도 또는 숙성 년수 (없으면 '정보없음')",
-              "detectedCategory": "실제 주종에 맞춰 'wine', 'whiskey', 'sake', 'beer' 중 하나 선택",
-              "isCodeDetected": 사진 속에 수기나 쪽지로 적힌 '${verificationCode}' 코드가 또렷이 보인다면 true, 아니면 false (불리언 값으로 입력)"
+              "detectedCategory": "실제 주종에 맞춰 'wine', 'whiskey', 'sake', 'beer' 중 하나 선택"
             }`
           },
           {
@@ -763,12 +773,8 @@ export default function TastingApp() {
           body: JSON.stringify(payload)
         });
 
-        if (!response.ok) {
-          const errText = await response.text();
-          console.error(`Gemini 에러 리포트: ${response.status} - ${errText}`);
-          throw new Error(`API failed with status ${response.status}`);
-        }
-
+        if (!response.ok) throw new Error(`API failed with status ${response.status}`);
+        
         const result = await response.json();
         const responseText = result.candidates?.[0]?.content?.parts?.[0]?.text;
 
@@ -783,24 +789,15 @@ export default function TastingApp() {
                 showToast(`주종을 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}'으로 변경했습니다!`, 'success');
               }
             }
-
-            if (shareToCommunity) {
-              if (parsed.isCodeDetected) {
-                showToast("실물 인증코드가 성공적으로 감지되었습니다!", "success");
-              } else {
-                showToast("쪽지 코드를 감지하지 못해 '집단지성 인증 투표'로 등록됩니다.", "info");
-              }
-            }
             setIsAnalyzing(false);
-            return; // 성공 시 마감
+            return; 
           }
         }
         throw new Error("Invalid response format");
       } catch (err) {
-        console.error("라벨 분석 트라이 횟수 실패 로그:", err);
+        console.error("라벨 분석 오류:", err);
         if (i === maxRetries - 1) {
-          setError("네트워크 지연 또는 용량 제한으로 분석이 지연되었습니다. 수기 작성을 진행하셔도 좋습니다.");
-          showToast("라벨 분석 네트워크 타임아웃", "error");
+          setError("라벨 정밀 인식이 지연되어 수기 테이스팅 노트 입력을 진행합니다.");
           setIsAnalyzing(false);
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -822,11 +819,6 @@ export default function TastingApp() {
     try {
       const smallImage = image ? await compressImage(image, 300) : null;
 
-      let verificationStatus = 'ai_verified';
-      if (shareToCommunity) {
-        verificationStatus = analysisResult.isCodeDetected ? 'ai_verified' : 'pending_vote';
-      }
-
       const newNote = {
         liquorType: selectedLiquorType,
         analysisResult,
@@ -836,7 +828,23 @@ export default function TastingApp() {
         personalNotes,
         overallRating,
         thumbnail: smallImage,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        
+        // 프리미엄 세분화 데이터 바인딩
+        visual: {
+          color: wineColor,
+          colorTone: wineColorTone,
+          clarity: wineClarity,
+          viscosity: wineViscosity
+        },
+        aromaIntensity,
+        finish: {
+          length: finishLength,
+          evolutionFirst,
+          evolutionTime,
+          evolutionBetter
+        },
+        foodPairing
       };
 
       const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
@@ -852,22 +860,16 @@ export default function TastingApp() {
           ratings: { [user.uid]: overallRating },
           originalRatings: ratings,
           comments: [],
-          isVerified: verificationStatus === 'ai_verified',
-          verificationStatus,
-          verificationCodeUsed: verificationCode,
-          votes: {
-            voters: {},
-            yesCount: 0,
-            noCount: 0
-          }
+          isVerified: true, // 위조방지 코드가 제거되었으므로 즉시 게시
+          verificationStatus: 'community_verified'
         });
       }
 
-      showToast("테이스팅 노트가 안전하게 저장되었습니다!");
+      showToast("프리미엄 테이스팅 노트가 완벽히 저장되었습니다!");
       resetForm();
       navigateTo('list');
     } catch (err) {
-      showToast("저장 중 오류가 발생했습니다: " + err.message, "error");
+      showToast("저장 중 오류 발생: " + err.message, "error");
     } finally {
       setIsSaving(false);
     }
@@ -1163,6 +1165,48 @@ export default function TastingApp() {
         )}
 
         <div className={`transition-all duration-500 ${analysisResult ? 'opacity-100' : 'opacity-50 pointer-events-none hidden'}`}>
+          
+          {/* 1. 시각적 관찰 (Visual/Color Stage) 신규 추가 */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+              <span className="w-1.5 h-5 bg-indigo-600 rounded-full mr-2"></span> 눈으로 보는 시각 관찰 (Visual)
+            </h3>
+            
+            <div className="mb-4">
+              <label className="block text-xs font-black text-gray-400 mb-2">색상 선택 (Color)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {['보라색', '루비색', '가넷색', '벽돌색', '황갈색', '투명한 황금색', '연녹색'].map(color => (
+                  <button key={color} type="button" onClick={() => setWineColor(color)} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${wineColor === color ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 border border-gray-100'}`}>
+                    {color}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div>
+                <label className="block text-xs font-black text-gray-400 mb-2">투명도 (Clarity)</label>
+                <select value={wineClarity} onChange={e => setWineClarity(e.target.value)} className="w-full text-xs font-bold bg-gray-50 border p-2.5 rounded-xl outline-none border-gray-100">
+                  <option value="">투명도 선택</option>
+                  <option value="맑음">맑음 (Brilliant)</option>
+                  <option value="약간맑음">약간 맑음</option>
+                  <option value="약간탁함">약간 탁함</option>
+                  <option value="탁함">탁함 (Cloudy)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-black text-gray-400 mb-2">점도 / 눈물 (Viscosity)</label>
+                <select value={wineViscosity} onChange={e => setWineViscosity(e.target.value)} className="w-full text-xs font-bold bg-gray-50 border p-2.5 rounded-xl outline-none border-gray-100">
+                  <option value="">점도 선택</option>
+                  <option value="맑음(낮음)">낮음 (가벼운 바디)</option>
+                  <option value="보통">보통 (Medium)</option>
+                  <option value="진함(높음)">높음 (짙은 당도/알코올)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. 맛의 균형 (Palate) */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-5 flex items-center">
               <span className={`w-1.5 h-5 ${theme.bar} rounded-full mr-2`}></span> 맛의 균형 (Palate)
@@ -1170,6 +1214,7 @@ export default function TastingApp() {
             {config.criteria?.map(renderRatingBar)}
           </div>
 
+          {/* 3. 느껴지는 아로마 & 부케 (Aromas) */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
               <span className="w-1.5 h-5 bg-emerald-600 rounded-full mr-2"></span> 느껴지는 아로마 & 부케 (Aromas)
@@ -1202,6 +1247,54 @@ export default function TastingApp() {
             </div>
           </div>
 
+          {/* 4. 피니시 및 시간 경과에 따른 변화 (Finish & Evolution) 신규 추가 */}
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+              <span className="w-1.5 h-5 bg-amber-600 rounded-full mr-2"></span> 목 넘김 후 피니시 & 진화 (Finish)
+            </h3>
+
+            <div className="mb-4">
+              <label className="block text-xs font-black text-gray-400 mb-2">여운의 길이 (Length)</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['짧음 (<5초)', '중간 (5-10초)', '길고 깊음 (>10초)'].map(len => (
+                  <button key={len} type="button" onClick={() => setFinishLength(len)} className={`py-2 rounded-xl text-xs font-bold transition-all ${finishLength === len ? 'bg-amber-600 text-white shadow-sm' : 'bg-gray-50 text-gray-600 border border-gray-100'}`}>
+                    {len}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-3 border-t border-dashed border-gray-100">
+              <label className="block text-xs font-black text-gray-400">시간 경과에 따른 변화 (Evolution)</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <span className="block text-[11px] text-gray-500 mb-1">처음 오픈했을 때</span>
+                  <select value={evolutionFirst} onChange={e => setEvolutionFirst(e.target.value)} className="w-full text-xs font-bold bg-gray-50 border p-2.5 rounded-xl outline-none border-gray-100">
+                    <option value="">선택</option>
+                    <option value="개방적">향이 개방적임</option>
+                    <option value="닫힌 느낌">닫혀 있어서 밍밍함</option>
+                  </select>
+                </div>
+                <div>
+                  <span className="block text-[11px] text-gray-500 mb-1">시간이 갈수록 좋아졌나요?</span>
+                  <div className="flex gap-2">
+                    {['YES', 'NO'].map(yesno => (
+                      <button key={yesno} type="button" onClick={() => setEvolutionBetter(yesno)} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${evolutionBetter === yesno ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 border'}`}>
+                        {yesno}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <label className="block text-xs font-black text-gray-400 mb-1.5">음식 페어링 아이디어 (Pairing)</label>
+              <input type="text" value={foodPairing} onChange={e => setFoodPairing(e.target.value)} placeholder="예: 구운 소고기 등심, 브리 치즈" className="w-full text-xs font-bold bg-gray-50 border p-3 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500" />
+            </div>
+          </div>
+
+          {/* 5. 종합 평가 & 오늘의 한줄평 */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-6">
             <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
               <span className="w-1.5 h-5 bg-indigo-600 rounded-full mr-2"></span> 종합 평가 & 오늘의 한줄평
@@ -1210,7 +1303,7 @@ export default function TastingApp() {
               <label className="block text-sm font-bold text-gray-700 mb-3">전체 만족도 점수</label>
               <div className="flex space-x-2">
                 {[1, 2, 3, 4, 5].map((star) => (
-                  <button key={star} onClick={() => setOverallRating(star)} className="p-1 transition-transform hover:scale-110">
+                  <button key={star} type="button" onClick={() => setOverallRating(star)} className="p-1 transition-transform hover:scale-110">
                     <Icon name="Star" className={`w-9 h-9 ${star <= overallRating ? 'fill-current text-yellow-400 drop-shadow-sm' : 'text-gray-300'}`} />
                   </button>
                 ))}
