@@ -253,6 +253,27 @@ export default function TastingApp() {
 
   // Form State
   const [selectedLiquorType, setSelectedLiquorType] = useState('wine');
+  // --- [1단계 패치] 신규 테이스팅 상세 입력용 State ---
+  // 기존의 verificationCode 및 shareToCommunity 관련 중 일부는 유지하거나 단순화합니다.
+  const [shareToCommunity, setShareToCommunity] = useState(false);
+  const [selectedLiquorType, setSelectedLiquorType] = useState('wine');
+  
+  // 시각 관찰 (Visual) State
+  const [wineColor, setWineColor] = useState(''); // 보라색, 루비색, 가넷색, 벽돌색, 황갈색 등
+  const [wineColorTone, setWineColorTone] = useState(''); // 얕은, 중간, 짙은
+  const [wineClarity, setWineClarity] = useState(''); // 맑음, 약간맑음, 약간탁함, 탁함
+  const [wineViscosity, setWineViscosity] = useState(''); // 맑음(낮음), 약간맑음, 약간탁함, 탁함(높음)
+
+  // 후각 관찰 (Smell stages) Intensity
+  const [aromaIntensity, setAromaIntensity] = useState('중간'); // 약함, 중간, 강함
+
+  // 여운 및 변화 (Finish & Evolution)
+  const [finishLength, setFinishLength] = useState(''); // 짧음(<5초), 중간(5~10초), 긴(>10초)
+  const [evolutionFirst, setEvolutionFirst] = useState(''); // 개방적, 닫힌 느낌
+  const [evolutionTime, setEvolutionTime] = useState(''); // 향이 열림, 균형감 변화
+  const [evolutionBetter, setEvolutionBetter] = useState(''); // YES, NO
+  const [foodPairing, setFoodPairing] = useState(''); // 음식 페어링 아이디어
+  
   const [image, setImage] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
