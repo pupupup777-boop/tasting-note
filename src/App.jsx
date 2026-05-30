@@ -4,7 +4,7 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDocs } from 'firebase/firestore';
 
 const fallbackConfig = {
-  apiKey: "AIzaSyBPh3sbeDslXC7A1JT5Xl6SM-TxwJ0D8Bo",
+  apiKey: "AIzaSyDfsow7Q73INwwaFylX4De6LwKrmEDovcE",
   authDomain: "chill-sip.firebaseapp.com",
   projectId: "chill-sip",
   storageBucket: "chill-sip.firebasestorage.app",
@@ -21,13 +21,16 @@ const db = getFirestore(app);
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'wine-tasting-app';
 const appId = rawAppId.replace(/\//g, '_');
 
-const apiKey = typeof process !== 'undefined' && process.env.REACT_APP_GEMINI_API_KEY 
-  ? process.env.REACT_APP_GEMINI_API_KEY 
-  : (typeof __webpack_env__ !== 'undefined' && __webpack_env__.REACT_APP_GEMINI_API_KEY 
-     ? __webpack_env__.REACT_APP_GEMINI_API_KEY 
-     : (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY
-        ? import.meta.env.VITE_GEMINI_API_KEY
-        : ""));
+// 이전 버전의 안정적인 VITE 환경 변수 및 dynamic fallback 바인딩 복원
+const GEMINI_API_KEY = (() => {
+  try {
+    return import.meta.env.VITE_GEMINI_API_KEY || "";
+  } catch (e) {
+    return "";
+  }
+})();
+
+const isApiKeyMissing = !GEMINI_API_KEY || GEMINI_API_KEY.trim() === "";
 
 // 샴페인 전용 기포 상승 애니메이션 효과 스타일시트 상수 정의 (탑레벨 모듈 호이스팅 배치)
 const customStyles = `
@@ -1070,6 +1073,13 @@ export default function App() {
 
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
+    
+    // API Key 부재시 프론트엔드 에러 방어 처리
+    if (isApiKeyMissing) {
+      showToast("Vite/Vercel 환경변수(VITE_GEMINI_API_KEY) 설정이 부재합니다. 관리자 콘솔을 확인해 주세요.", "error");
+      return;
+    }
+
     setIsSearching(true);
     setSearchResult(null);
 
@@ -1092,7 +1102,7 @@ export default function App() {
         generationConfig: { responseMimeType: "application/json" }
       };
 
-      const basicResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+      const basicResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(basicPayload)
@@ -1156,7 +1166,7 @@ export default function App() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 9000);
 
-        const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        const priceResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(pricePayload),
@@ -1238,6 +1248,12 @@ export default function App() {
 
   const handleAnalyzeTaste = async () => {
     if (notes.length < 5) return;
+    
+    if (isApiKeyMissing) {
+      showToast("Vite/Vercel 환경변수(VITE_GEMINI_API_KEY) 설정이 부재합니다.", "error");
+      return;
+    }
+
     setIsAnalyzingTaste(true);
     setTasteAnalysisResult(null);
 
@@ -1267,7 +1283,7 @@ export default function App() {
         generationConfig: { responseMimeType: "application/json" }
       };
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1294,6 +1310,12 @@ export default function App() {
   };
 
   function analyzeLabel(base64Image) {
+    if (isApiKeyMissing) {
+      showToast("환경변수 바인딩 누락으로 수기 가이드 작성이 즉시 활성화됩니다.", "info");
+      setError("라벨 정밀 인식이 지연되어 수기 테이스팅 노트 입력을 진행합니다.");
+      return;
+    }
+
     setIsAnalyzing(true);
     setError(null);
     const base64Data = base64Image.split(',')[1];
@@ -1334,9 +1356,7 @@ export default function App() {
 
     const runCall = async (retryCount, currentDelay) => {
       try {
-        // ★ 핵심 버그 교정: 지원 기한이 종료되어 통신이 거부되던 구형 gemini-2.5-flash 모델을
-        // 현재 미리보기 환경에서 공식 지원하는 'gemini-2.5-flash-preview-09-2025' 최신 이미지 인지용 모델로 정확히 정정 이식했습니다.
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${GEMINI_API_KEY}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -1424,7 +1444,6 @@ export default function App() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
 
-          {/* 사진 터치 시 즉시 새로운 사진을 촬영하고 교체해올 수 있는 터치 트리거형 이미지 바인더 */}
           {!image ? (
             <div onClick={triggerFileInput} className={`border-2 border-dashed ${theme.border} rounded-xl p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors group flex flex-col items-center justify-center h-48 bg-gray-50/50`}>
               <Icon name="Camera" className={`w-12 h-12 ${theme.text} opacity-50 mb-3`} />
@@ -1465,7 +1484,6 @@ export default function App() {
                     <h2 className="text-lg font-bold leading-tight pr-2">{analysisResult.name}</h2>
                     <span className={`px-2 py-1 rounded text-xs font-bold ${wineCardTheme.badgeBg}`}>{analysisResult.type}</span>
                   </div>
-                  {/* 지역/국가명 길어도 잘리지 않고 자동 줄바꿈되는 플렉스 랩 보장 설계 */}
                   <div className="grid grid-cols-1 gap-y-2.5 text-sm border-t border-dashed border-gray-200/20 pt-3">
                     <div>
                       <span className={`block text-[10px] font-bold uppercase mb-0.5 ${wineCardTheme.subText}`}>생산지 (Region/Country)</span>
@@ -1479,7 +1497,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 구매가격과 빈티지 수동 입력란 나란히 그리드 배치 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 ml-1">구매 가격 <span className="text-gray-400 font-normal">(선택)</span></label>
@@ -1569,7 +1586,7 @@ export default function App() {
             <div className="grid grid-cols-2 gap-3 mt-4">
               <div>
                 <label className="block text-xs font-black text-gray-400 mb-2">투명도 (Clarity)</label>
-                <select value={wineClarity} onChange={e => setWineClarity(e.target.value)} className="w-full text-xs font-black bg-gray-50 border p-2.5 rounded-xl outline-none border-gray-200">
+                <select value={wineClarity} onChange={e => setWineClarity(e.target.value)} className="w-full text-xs font-black bg-gray-50 border border-gray-200 p-2.5 rounded-xl outline-none">
                   <option value="">투명도 선택</option>
                   <option value="맑음 (Brilliant)">맑음 (Brilliant)</option>
                   <option value="약간 맑음">약간 맑음</option>
@@ -1579,7 +1596,7 @@ export default function App() {
               </div>
               <div>
                 <label className="block text-xs font-black text-gray-400 mb-2">점도 / 눈물 (Viscosity)</label>
-                <select value={wineViscosity} onChange={e => setWineViscosity(e.target.value)} className="w-full text-xs font-black bg-gray-50 border p-2.5 rounded-xl outline-none border-gray-200">
+                <select value={wineViscosity} onChange={e => setWineViscosity(e.target.value)} className="w-full text-xs font-black bg-gray-50 border border-gray-200 p-2.5 rounded-xl outline-none">
                   <option value="">점도 선택</option>
                   <option value="가벼움 (낮음)">가벼움 (낮음)</option>
                   <option value="중간 (보통)">중간 (보통)</option>
@@ -1649,7 +1666,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <span className="block text-[10px] text-gray-500 mb-1">처음 오픈했을 때</span>
-                  <select value={evolutionFirst} onChange={e => setEvolutionFirst(e.target.value)} className="w-full text-xs font-black bg-gray-50 border p-2.5 rounded-xl outline-none border-gray-200">
+                  <select value={evolutionFirst} onChange={e => setEvolutionFirst(e.target.value)} className="w-full text-xs font-black bg-gray-50 border border-gray-200 p-2.5 rounded-xl outline-none">
                     <option value="">선택</option>
                     <option value="개방적">향이 개방적임</option>
                     <option value="닫힌 느낌">닫혀 있어서 밍밍함</option>
@@ -1659,7 +1676,7 @@ export default function App() {
                   <span className="block text-[10px] text-gray-500 mb-1">시간이 갈수록 좋아졌나요?</span>
                   <div className="flex gap-2">
                     {['YES', 'NO'].map(yesno => (
-                      <button key={yesno} type="button" onClick={() => setEvolutionBetter(yesno)} className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${evolutionBetter === yesno ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 border'}`}>
+                      <button key={yesno} type="button" onClick={() => setEvolutionBetter(yesno)} className={`flex-1 py-2 rounded-xl text-xs font-black transition-all ${evolutionBetter === yesno ? 'bg-indigo-600 text-white shadow-sm' : 'bg-gray-50 border border-gray-200'}`}>
                         {yesno}
                       </button>
                     ))}
@@ -1670,7 +1687,7 @@ export default function App() {
 
             <div className="mt-4 pt-4 border-t border-gray-100">
               <label className="block text-xs font-black text-gray-400 mb-1.5">추천 음식 페어링 (Food Pairing)</label>
-              <input type="text" value={foodPairing} onChange={e => setFoodPairing(e.target.value)} placeholder="예: 양념 소갈비 구이, 짭조름한 치즈 플래터" className="w-full text-xs font-bold bg-gray-50 border p-3 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500 border-gray-200" />
+              <input type="text" value={foodPairing} onChange={e => setFoodPairing(e.target.value)} placeholder="예: 양념 소갈비 구이, 짭조름한 치즈 플래터" className="w-full text-xs font-bold bg-gray-50 border border-gray-200 p-3 rounded-xl outline-none focus:ring-1 focus:ring-indigo-500" />
             </div>
           </div>
 
@@ -1767,7 +1784,7 @@ export default function App() {
               className={`w-full py-3.5 rounded-2xl text-xs font-black transition-all flex items-center justify-center shadow ${
                 isTasteAnalysisEnabled 
                   ? 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-95' 
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed border'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
               }`}
             >
               {isAnalyzingTaste ? (
@@ -1800,1104 +1817,4 @@ export default function App() {
               </div>
 
               <div>
-                <span className="text-[10px] uppercase text-emerald-300 block mb-1">💡 추천 음용 가이드</span>
-                <p className="text-white text-xs bg-white/5 p-3 rounded-xl border border-white/5">{tasteAnalysisResult.howToDrink}</p>
-              </div>
-
-              <div>
-                <span className="text-[10px] uppercase text-amber-300 block mb-1">👑 최고의 최애 픽</span>
-                <p className="text-white text-xs bg-white/5 p-3 rounded-xl border border-white/5">{tasteAnalysisResult.bestPick}</p>
-              </div>
-
-              <div>
-                <span className="text-[10px] uppercase text-rose-300 block mb-1">📖 다음 단계 공부용 와인 추천</span>
-                <p className="text-white text-xs bg-white/5 p-3 rounded-xl border border-white/5">{tasteAnalysisResult.studyWine}</p>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function renderListView() {
-    return (
-      <div className="space-y-4 animate-in fade-in">
-        <div className="flex justify-between items-center">
-          <h2 className="text-xl font-black text-slate-800">내 테이스팅 노트 ({processedNotesList.length})</h2>
-          <select 
-            value={listSortOption} 
-            onChange={(e) => setListSortOption(e.target.value)} 
-            className="text-[10px] font-black bg-white border border-gray-200 rounded-lg p-1.5 outline-none cursor-pointer text-gray-700"
-          >
-            <option value="latest">최신 등록순</option>
-            <option value="rateDesc">평점 높은순</option>
-            <option value="rateAsc">평점 낮은순</option>
-            <option value="priceDesc">가격 높은순</option>
-            <option value="priceAsc">가격 낮은순</option>
-          </select>
-        </div>
-
-        <div className="bg-slate-100 p-1 rounded-xl flex border border-gray-200/50">
-          <button 
-            type="button"
-            onClick={() => setListLayoutMode('list')}
-            className={`flex-1 py-1.5 text-xs font-black rounded-lg transition-all ${listLayoutMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}
-          >
-            📋 리스트 보기
-          </button>
-          <button 
-            type="button"
-            onClick={() => setListLayoutMode('map')}
-            className={`flex-1 py-1.5 text-xs font-black rounded-lg transition-all ${listLayoutMode === 'map' ? 'bg-white text-indigo-900 shadow-sm' : 'text-gray-500'}`}
-          >
-            🗺️ 세계지도 보기
-          </button>
-        </div>
-
-        <div className="overflow-x-auto whitespace-nowrap hide-scrollbar flex gap-1.5 pb-1">
-          {[
-            { id: 'all', label: '전체 🍶' },
-            { id: 'red', label: '레드 와인 🔴' },
-            { id: 'white', label: '화이트 와인 🟡' },
-            { id: 'sparkling', label: '샴페인 🍾' },
-            { id: 'dessert', label: '디저트 와인 🍯' },
-            { id: 'whiskey', label: '위스키 🥃' },
-            { id: 'sake', label: '사케 🍶' },
-            { id: 'beer', label: '맥주 🍺' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setListStyleFilter(tab.id)}
-              className={`px-3 py-1.5 rounded-full text-[10px] font-black border transition-all ${
-                listStyleFilter === tab.id 
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-sm' 
-                  : 'bg-white text-slate-600 border-gray-200 hover:bg-slate-50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {listLayoutMode === 'map' && (
-          <div className="bg-white p-4 rounded-3xl border border-gray-200 shadow-inner space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-black text-slate-500">🗺️ 원산지 국가별 분포 (터치하여 필터링)</span>
-              {listCountryFilter !== 'all' && (
-                <button 
-                  type="button"
-                  onClick={() => { setListCountryFilter('all'); }} 
-                  className="text-[9px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100 active:scale-95"
-                >
-                  필터 초기화
-                </button>
-              )}
-            </div>
-            
-            <div className="relative border border-slate-100 rounded-2xl bg-slate-50 overflow-hidden" style={{ minHeight: '220px' }}>
-              <svg viewBox="0 0 600 320" className="w-full h-full">
-                {mapContinents.map(c => (
-                  <path 
-                    key={c.name} 
-                    d={c.path} 
-                    fill="#e2e8f0" 
-                    stroke="#cbd5e1" 
-                    strokeWidth="1.5" 
-                    strokeLinejoin="round" 
-                  />
-                ))}
-
-                {Object.entries(mapPinsCoords).map(([name, coords]) => {
-                  const count = countryCountsMap[name] || 0;
-                  const isFiltered = listCountryFilter === name;
-
-                  return (
-                    <g 
-                      key={name} 
-                      transform={`translate(${coords.x}, ${coords.y})`}
-                      className="cursor-pointer group"
-                      onClick={() => setListCountryFilter(isFiltered ? 'all' : name)}
-                    >
-                      {count > 0 && (
-                        <circle 
-                          r="12" 
-                          fill={isFiltered ? '#4f46e5' : '#ef4444'} 
-                          className="animate-ping opacity-35" 
-                        />
-                      )}
-                      <circle 
-                        r="6" 
-                        fill={count > 0 ? (isFiltered ? '#4338ca' : '#dc2626') : '#94a3b8'} 
-                        stroke="#ffffff" 
-                        strokeWidth="1.5" 
-                      />
-                      <text 
-                        y="-10" 
-                        textAnchor="middle" 
-                        className="text-[9px] font-black select-none" 
-                        fill={count > 0 ? '#1e293b' : '#64748b'}
-                      >
-                        {name}{count > 0 ? ` (${count})` : ''}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
-          </div>
-        )}
-
-        {processedNotesList.length === 0 && (
-          <div className="text-center p-12 bg-white rounded-2xl border text-gray-400 font-bold text-xs">
-            조건에 부합하는 테이스팅 기록이 없습니다.
-          </div>
-        )}
-
-        {processedNotesList.map(note => {
-          const conf = LIQUOR_CONFIG[note.liquorType] || LIQUOR_CONFIG.wine;
-          const theme = getThemeClasses(conf.theme);
-          const displayScore = note.overallRating100 || (note.overallRating ? note.overallRating * 20 : 0);
-
-          return (
-            <div 
-              key={note.id} 
-              type="button"
-              onClick={() => { setSelectedDetailNote(note); setIsCommunityModal(false); }} 
-              className="bg-white p-4 rounded-xl shadow-sm border flex gap-4 hover:shadow-md transition-all cursor-pointer active:scale-[0.99] items-center text-left"
-            >
-              {note.thumbnail ? (
-                <img src={note.thumbnail} className="w-16 h-16 bg-gray-100 rounded-lg object-cover shrink-0" alt="Bottle preview" />
-              ) : (
-                <div className="w-16 h-16 bg-gray-50 rounded-lg flex items-center justify-center text-3xl shrink-0 border border-gray-100">{conf.icon}</div>
-              )}
-              <div className="flex-1 min-w-0">
-                <div className={`text-[9px] px-2 py-0.5 rounded inline-block font-bold mb-1 uppercase ${theme.bg} ${theme.text}`}>
-                  {note.wineStyle ? `${note.wineStyle === 'white' ? 'White' : note.wineStyle === 'sparkling' ? 'Sparkling' : 'Dessert'}` : (note.analysisResult?.type || conf.name)}
-                </div>
-                <h3 className="font-black text-sm text-gray-900 truncate leading-snug">{note.analysisResult?.name}</h3>
-                <div className="flex items-center gap-3 text-[10px] text-gray-400 font-bold mt-1">
-                  <span className="flex items-center text-amber-500 font-black">
-                    ★ {displayScore}점
-                  </span>
-                  {note.price > 0 && (
-                    <span>₩ {note.price.toLocaleString()}</span>
-                  )}
-                  {note.analysisResult?.vintage && note.analysisResult.vintage !== '정보없음' && (
-                    <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 text-[8px] font-bold">Vintage: {note.analysisResult.vintage}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  function renderSearchView() {
-    return (
-      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <div className="bg-gradient-to-br from-slate-900 to-indigo-900 rounded-2xl p-6 text-white shadow-md">
-          <h2 className="text-xl font-bold flex items-center mb-2">
-            <Icon name="Search" className="w-6 h-6 mr-2 text-blue-300" /> 보틀 백과 & 시세 검색
-          </h2>
-          <p className="text-sm text-indigo-100 opacity-90 leading-relaxed">
-            궁금한 보틀 이름을 검색해보세요.<br />AI가 최신 웹 검색을 통해 역사, 테이스팅 노트, 그리고 최근 시세(출처 및 성지 가격)를 명확하게 정밀 요약해 드립니다.
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-2 bg-white p-2 rounded-2xl shadow-sm border border-gray-200">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearchLiquor()}
-            placeholder="예: 조니워커 블루라벨, 맥캘란 12년 쉐리"
-            className="flex-1 bg-transparent px-3 py-2 outline-none text-gray-800 placeholder-gray-400"
-          />
-          <button
-            onClick={handleSearchLiquor}
-            disabled={isSearching || !searchQuery.trim()}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition-colors disabled:opacity-50"
-          >
-            {isSearching ? <Icon name="Loader2" className="w-5 h-5 animate-spin" /> : <Icon name="Search" className="w-5 h-5" />}
-          </button>
-        </div>
-
-        {searchResult && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-top-4">
-            <div className="bg-gray-50 px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-black text-lg text-gray-900">{searchResult.name}</h3>
-              <div className="bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-1 rounded">AI 요약</div>
-            </div>
-
-            <div className="p-5 space-y-5">
-              <div>
-                <h4 className="flex items-center text-sm font-bold text-gray-800 mb-1.5"><Icon name="BookOpen" className="w-4 h-4 mr-1.5 text-gray-500" /> 역사 및 특징</h4>
-                <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-3 rounded-xl">{searchResult.summary}</p>
-              </div>
-
-              <div>
-                <h4 className="flex items-center text-sm font-bold text-gray-800 mb-1.5"><Icon name="Wine" className="w-4 h-4 mr-1.5 text-rose-500" /> 테이스팅 노트</h4>
-                <p className="text-sm text-gray-600 leading-relaxed bg-rose-50/50 p-3 rounded-xl border border-rose-100">{searchResult.tasting}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-2">
-                <div className="bg-blue-50/40 border border-blue-100/70 p-3.5 rounded-2xl flex flex-col justify-between">
-                  <div>
-                    <h4 className="flex items-center text-[11px] font-black text-blue-800 mb-1.5">
-                      <Icon name="DollarSign" className="w-3.5 h-3.5 mr-1" /> 시중 평균 시세
-                    </h4>
-                    <div className="flex items-center gap-1.5 my-1">
-                      {searchResult.avgPrice === "실시간 시세 파악 중..." && (
-                        <Icon name="Loader2" className="w-3.5 h-3.5 animate-spin text-blue-600 shrink-0" />
-                      )}
-                      <p className="text-sm font-black text-gray-900 tracking-tight">{searchResult.avgPrice}</p>
-                    </div>
-                  </div>
-                  {searchResult.avgPriceSource && searchResult.avgPriceSource !== "정보없음" && (
-                    <p className="text-[9px] text-gray-400 font-bold mt-1.5 pt-1.5 border-t border-blue-100/30">
-                      출처: {searchResult.avgPriceLink ? (
-                        <a href={searchResult.avgPriceLink} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-0.5 font-black bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 transition-transform active:scale-95">
-                          {searchResult.avgPriceSource} 🔗
-                        </a>
-                      ) : (
-                        <span className="text-gray-500 font-medium">{searchResult.avgPriceSource}</span>
-                      )}
-                    </p>
-                  )}
-                </div>
-
-                <div className="bg-amber-50/40 border border-amber-100/70 p-3.5 rounded-2xl flex flex-col justify-between">
-                  <div>
-                    <h4 className="flex items-center text-[11px] font-black text-amber-800 mb-1.5">
-                      <Icon name="MapPin" className="w-3.5 h-3.5 mr-1" /> 최근 성지/최저가 정보
-                    </h4>
-                    <div className="flex items-center gap-1.5 my-1">
-                      {searchResult.bargainInfo === "최저가 정보 수집 중..." && (
-                        <Icon name="Loader2" className="w-3.5 h-3.5 animate-spin text-amber-600 shrink-0" />
-                      )}
-                      <p className="text-sm font-black text-gray-900 tracking-tight">{searchResult.bargainInfo}</p>
-                    </div>
-                  </div>
-                  {searchResult.bargainInfoSource && searchResult.bargainInfoSource !== "정보없음" && (
-                    <p className="text-[9px] text-gray-400 font-bold mt-1.5 pt-1.5 border-t border-amber-100/30">
-                      출처: {searchResult.bargainInfoLink ? (
-                        <a href={searchResult.bargainInfoLink} target="_blank" rel="noopener noreferrer" className="text-amber-700 hover:underline inline-flex items-center gap-0.5 font-black bg-amber-50 px-1.5 py-0.5 rounded border border-indigo-100 transition-transform active:scale-95">
-                          {searchResult.bargainInfoSource} 🔗
-                        </a>
-                      ) : (
-                        <span className="text-gray-500 font-medium">{searchResult.bargainInfoSource}</span>
-                      )}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {searchResult.sources && searchResult.sources.length > 0 && (
-                <div className="mt-4 pt-3 border-t border-gray-100">
-                  <h5 className="text-[11px] font-bold text-gray-400 mb-2 flex items-center gap-1.5">
-                    <Icon name="ShieldCheck" className="w-3.5 h-3.5 text-emerald-500" /> 실시간 실거래 검색 참조 링크
-                  </h5>
-                  <div className="flex flex-wrap gap-1.5">
-                    {searchResult.sources.slice(0, 3).map((src, idx) => (
-                      <a
-                        key={idx}
-                        href={src.uri}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1.5 rounded-lg border border-indigo-100 font-semibold max-w-full truncate block transition-all hover:scale-[1.02]"
-                      >
-                        🔗 {src.title || "참조 실거래 사이트"}
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function renderCommunityView() {
-    let displayedPosts = [...communityPosts];
-    if (communitySort === 'latest') displayedPosts.sort((a, b) => b.createdAt - a.createdAt);
-    else if (communitySort === 'best') displayedPosts.sort((a, b) => (b.totalCommunityScore || 0) - (a.totalCommunityScore || 0));
-
-    return (
-      <div className="space-y-4 animate-in fade-in duration-300">
-
-        <div className="bg-gradient-to-r from-gray-900 via-slate-900 to-black rounded-2xl p-5 text-white shadow-xl relative overflow-hidden">
-          <div className="absolute -right-10 -bottom-10 opacity-10 pointer-events-none transform rotate-12">
-            <Icon name="Users" className="w-40 h-40" />
-          </div>
-          <div className="relative z-10">
-            <h2 className="text-lg font-black flex items-center mb-1.5">
-              <Icon name="Users" className="w-5 h-5 mr-2 text-indigo-400" /> 커뮤니티 스퀘어
-            </h2>
-            <button 
-              type="button"
-              onClick={() => setShowRankModal(true)} 
-              className="bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shadow-sm"
-            >
-              내 칭호: <span className="text-yellow-400 font-black">{userStats[user?.uid]?.badge || '🥚 알콜 입문자'}</span> 🔍
-            </button>
-          </div>
-        </div>
-
-        <div className="flex bg-gray-200/70 p-1 rounded-xl border border-gray-300/30">
-          <button
-            type="button"
-            onClick={() => setSubTab('lounge')}
-            className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${subTab === 'lounge' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            💬 보틀 라운지 <span className="text-[10px] font-medium opacity-60">({displayedPosts.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSubTab('ranking')}
-            className={`flex-1 py-2 text-xs font-black rounded-lg transition-all ${subTab === 'ranking' ? 'bg-white text-indigo-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-          >
-            👑 명예 보틀 랭킹
-          </button>
-        </div>
-
-        {subTab === 'lounge' && (
-          <div className="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-gray-100 gap-2">
-            <div className="flex gap-1.5 overflow-x-auto hide-scrollbar snap-x flex-1">
-              <button type="button" onClick={() => setCommunityFilter('all')} className={`snap-start px-3 py-1 rounded-full text-xs font-black ${communityFilter === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-500 border hover:bg-gray-100'}`}>전체</button>
-              {Object.values(LIQUOR_CONFIG).map(l => (
-                <button key={l.id} type="button" onClick={() => setCommunityFilter(l.id)} className={`snap-start px-3 py-1 rounded-full text-xs font-black whitespace-nowrap ${communityFilter === l.id ? `${getThemeClasses(l.theme).btnBg} text-white` : 'bg-gray-50 text-gray-500 border hover:bg-gray-100'}`}>{l.icon} {l.name}</button>
-              ))}
-            </div>
-            <select onChange={(e) => setCommunitySort(e.target.value)} value={communitySort} className="text-[10px] font-black bg-gray-50 border border-gray-200/85 rounded-lg p-1.5 outline-none cursor-pointer text-gray-700 shrink-0">
-              <option value="latest">최신순</option>
-              <option value="best">베스트</option>
-            </select>
-          </div>
-        )}
-
-        {subTab === 'lounge' && (
-          <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-300">
-            {displayedPosts.filter(p => communityFilter === 'all' || p.liquorType === communityFilter).map(post => {
-              const conf = LIQUOR_CONFIG[post.liquorType] || LIQUOR_CONFIG.wine;
-              const avgScore = post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length) : 0;
-
-              return (
-                <div 
-                  key={post.id} 
-                  type="button"
-                  onClick={() => { setSelectedDetailNote(post); setIsCommunityModal(true); setOpenComments(p => ({ ...p, [post.id]: true })); }} 
-                  className="bg-white rounded-2xl border border-gray-200/80 overflow-hidden shadow-sm flex flex-col hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group relative text-left"
-                >
-                  <div className="aspect-square bg-gray-50 relative overflow-hidden border-b border-gray-100 shrink-0">
-                    {post.thumbnail ? (
-                      <img src={post.thumbnail} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="Bottle preview" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-4xl bg-slate-50">{conf.icon}</div>
-                    )}
-
-                    <span className={`absolute top-2 left-2 text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm z-10 ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>
-                      {post.wineStyle ? `${post.wineStyle === 'white' ? 'White' : post.wineStyle === 'sparkling' ? 'Sparkling' : 'Dessert'}` : (post.analysisResult?.type || conf.name)}
-                    </span>
-
-                    {post.isVerified && (
-                      <span className="absolute top-2 right-2 bg-emerald-500 text-white rounded-full p-0.5 shadow">
-                        <Icon name="Check" className="w-3 h-3 stroke-[3]" />
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="p-2.5 flex-1 flex flex-col justify-between space-y-1.5">
-                    <div className="min-w-0">
-                      <p className="font-black text-gray-900 text-xs truncate leading-tight group-hover:text-indigo-600">{post.analysisResult?.name || '이름 없음'}</p>
-                      <p className="text-[10px] text-gray-400 font-bold mt-0.5 truncate">by {post.userId === user?.uid ? userProfile.nickname : (post.userName || '보틀러')}</p>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] pt-1 border-t border-gray-50 flex-wrap gap-1">
-                      <span className="text-amber-500 font-black flex items-center">
-                        ★ {avgScore > 0 ? avgScore.toFixed(1) : "0.0"}
-                      </span>
-                      <span className="text-gray-400 font-medium">💬 {post.comments?.length || 0}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-            {displayedPosts.filter(p => communityFilter === 'all' || p.liquorType === communityFilter).length === 0 && (
-              <div className="col-span-2 text-center py-12 bg-white rounded-2xl border text-gray-400 font-medium text-xs">선택한 카테고리에 등록된 보틀이 없습니다.</div>
-            )}
-          </div>
-        )}
-
-        {subTab === 'ranking' && (
-          <div className="space-y-5 animate-in fade-in duration-300">
-            {[...displayedPosts]
-              .sort((a, b) => (b.totalCommunityScore || 0) - (a.totalCommunityScore || 0))
-              .map((post, index) => {
-                const rankingAuthorStats = userStats[post.userId] || { badge: '🥚 알콜 입문자', isTop: false, rank: '-' };
-                const myRating = post.ratings?.[user?.uid] || 0;
-                const conf = LIQUOR_CONFIG[post.liquorType] || LIQUOR_CONFIG.wine;
-                const hasCommented = post.comments?.some(c => c.userId === user?.uid);
-                const isRatingLocked = myRating > 0 && hasCommented;
-
-                return (
-                  <div key={post.id} className="bg-white rounded-3xl shadow-sm border border-gray-200/90 overflow-hidden relative text-left">
-
-                    <div className="p-3.5 flex items-center justify-between border-b border-gray-100 bg-slate-50/50">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm font-black px-2.5 py-0.5 rounded-xl text-white shadow-sm flex items-center gap-0.5 ${index === 0 ? 'bg-amber-500' : index === 1 ? 'bg-slate-400' : index === 2 ? 'bg-amber-700' : 'bg-gray-800'}`}>
-                          {index === 0 ? '🥇 1위' : index === 1 ? '🥈 2위' : index === 2 ? '🥉 3위' : `${index + 1}위`}
-                        </span>
-                        <div className="flex items-center gap-1.5 max-w-[150px] truncate">
-                          <span className="text-base mr-0.5">
-                            {rankingAuthorStats.isTop ? '🏆' : (rankingAuthorStats.badge ? rankingAuthorStats.badge.split(' ')[0] : '🥚')}
-                          </span>
-                          <span className="font-black text-xs text-gray-800">{post.userId === user?.uid ? userProfile.nickname : (post.userName || '지나간 보틀러')}</span>
-                          <span className="text-[9px] text-gray-400 font-medium shrink-0">{formatTimeAgo(post.createdAt)}</span>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0">
-                        <span className="flex items-center bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-blue-100"><Icon name="Check" className="w-3 h-3 mr-1" />  실물 공유</span>
-                      </div>
-                    </div>
-
-                    <div className="p-4 space-y-4">
-                      <div className="flex gap-4">
-                        {post.thumbnail && (
-                          <div 
-                            type="button"
-                            className="w-24 h-24 bg-gray-50 rounded-2xl border flex-shrink-0 relative overflow-hidden shadow-inner cursor-pointer" 
-                            onClick={() => setSelectedImage(post.thumbnail)}
-                          >
-                            <img src={post.thumbnail} className="w-full h-full object-cover" alt="Rank Bottle preview" />
-                            <div className="absolute top-1 left-1 bg-black/50 text-white rounded w-5 h-5 flex items-center justify-center text-xs">{conf.icon}</div>
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className={`text-[9px] font-black px-2 py-0.5 rounded mb-1 inline-block uppercase ${getThemeClasses(conf.theme).bg} ${getThemeClasses(conf.theme).text}`}>{post.wineStyle ? `${post.wineStyle === 'white' ? 'White' : post.wineStyle === 'sparkling' ? 'Sparkling' : 'Red'}` : (post.analysisResult?.type || conf.name)}</div>
-                          <h3 
-                            type="button"
-                            onClick={() => { setSelectedDetailNote(post); setIsCommunityModal(true); }} 
-                            className="font-black text-gray-900 leading-tight mb-1 hover:text-indigo-600 hover:underline cursor-pointer flex items-center gap-1 text-base"
-                          >
-                            {post.analysisResult?.name || '이름 없음'} 📋
-                          </h3>
-
-                          <div className="flex flex-col gap-1 mt-2 w-full">
-                            <div className="flex justify-between items-center text-[11px] font-black text-indigo-950">
-                              <span className="flex items-center gap-0.5"><Icon name="Star" className="w-3.5 h-3.5 fill-current text-amber-500" /> 누적 부러움 총점</span>
-                              <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-indigo-700 font-mono">{post.totalCommunityScore ? post.totalCommunityScore.toFixed(1) : "0.0"} 점</span>
-                            </div>
-                            <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden border border-gray-200/40 shadow-inner">
-                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
-                            </div>
-                            <p className="text-[9px] text-gray-400 font-bold text-right">참여: {Object.keys(post.ratings || {}).length}명 / 평점: {post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length).toFixed(1) : "0.0"}점</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {post.personalNotes && (
-                        <div className="text-sm text-gray-700 bg-gray-50/70 p-3.5 rounded-xl border border-gray-100 font-medium leading-relaxed italic">"{post.personalNotes}"</div>
-                      )}
-                    </div>
-
-                    <div className="border-t border-gray-100 bg-gray-50/70 p-4 space-y-3.5">
-                      <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-gray-200/60 shadow-sm gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-black text-gray-500 tracking-tight">부러움 점수 평가</p>
-                          <p className="text-[9px] text-indigo-500 font-bold truncate">댓글 작성 시 점수 자동 고정!</p>
-                        </div>
-                        {isRatingLocked ? (
-                          <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[11px] px-2.5 py-1.5 rounded-xl shadow-sm whitespace-nowrap">🔒 평가 완료 ({myRating.toFixed(1)}점)</div>
-                        ) : (
-                          <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; handleRatePost(post.id, post.ratings, calculated); }}>
-                            <FractionalStarRating value={myRating} onChange={(score) => handleRatePost(post.id, post.ratings, score)} />
-                          </div>
-                        )}
-                      </div>
-
-                      <button onClick={() => setOpenComments(p => ({ ...p, [post.id]: !p[post.id] }))} className="w-full flex items-center justify-between py-2 text-xs font-black text-gray-500 hover:text-indigo-600 transition-colors bg-white px-3 rounded-xl border border-gray-200/60 shadow-sm">
-                        <span className="flex items-center gap-1.5 whitespace-nowrap">💬 댓글 {(post.comments || []).length}개 {openComments[post.id] ? '접기' : '모두 보기'}</span>
-                        <span className="text-[10px] text-gray-400 shrink-0">{openComments[post.id] ? '▲' : '▼'}</span>
-                      </button>
-
-                      <div className={`transition-all duration-300 ${openComments[post.id] ? 'block animate-in fade-in slide-in-from-top-1' : 'hidden'}`}>
-                        <div className="space-y-3 max-h-[250px] overflow-y-auto pr-1">
-                          {(post.comments || []).map(c => {
-                            const commenterRating = post.ratings?.[c.userId] || 0;
-                            const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
-
-                            return (
-                              <div key={c.id} className="space-y-1.5 border-b border-gray-100/50 pb-2 last:border-0">
-                                <div className="text-xs bg-white p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[10px] shrink-0">{commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}</span>
-                                    <span className="font-bold text-gray-700">{c.userName || '알콜러'}</span>
-                                    {commenterRating > 0 && <span className="text-[9px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
-                                    <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
-                                  </div>
-                                  <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
-                                  <div className="text-right">
-                                    <button onClick={() => setActiveReplyBox(activeReplyBox === c.id ? null : c.id)} className="text-[10px] font-bold text-indigo-600 hover:underline mt-1">
-                                      {activeReplyBox === c.id ? '취소' : '↳ 답글 달기'}
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {(c.replies || []).map(r => {
-                                  const replyStats = userStats[r.userId] || { badge: '🥚 알콜 입문자' };
-                                  return (
-                                    <div key={r.id} className="ml-5 text-xs bg-gray-50/80 p-2 rounded-xl border border-dashed border-gray-200 space-y-1 flex gap-1.5 items-start">
-                                      <span className="text-gray-400 text-[11px] mt-0.5 shrink-0">↳</span>
-                                      <div className="flex-1 space-y-0.5">
-                                        <div className="flex items-center gap-1 flex-wrap">
-                                          <span className="text-[10px] shrink-0">{replyStats.badge ? replyStats.badge.split(' ')[0] : '🥚'}</span>
-                                          <span className="font-bold text-gray-700">{r.userName || '알콜러'}</span>
-                                          <span className="text-[8px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(r.createdAt)}</span>
-                                        </div>
-                                        <p className="text-gray-600 font-medium pl-0.5">{r.text}</p>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-
-                                {activeReplyBox === c.id && (
-                                  <div className="ml-5 flex gap-1.5 pt-1 animate-in slide-in-from-top-2 duration-200">
-                                    <input type="text" placeholder="답글 내용을 입력하세요..." value={replyInputs[c.id] || ''} onChange={(e) => setReplyInputs(p => ({ ...p, [c.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddReply(selectedDetailNote.id, c.id)} className="flex-1 border rounded-xl px-2.5 py-1.5 bg-white text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
-                                    <button onClick={() => handleAddReply(selectedDetailNote.id, c.id)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl shrink-0 shadow-sm">등록</button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2 pt-1 border-t border-gray-200/50">
-                        <input type="text" placeholder="댓글을 남기고 점수를 고정하세요!" value={commentInputs[post.id] || ''} onChange={(e) => setCommentInputs(p => ({ ...p, [post.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)} className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
-                        <button onClick={() => handleAddComment(post.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md"><Icon name="Send" className="w-3 h-3 ml-0.5" /></button>
-                      </div>
-                    </div>
-
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-  return (
-    <div className="min-h-screen bg-gray-50 font-sans pb-10">
-      <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
-      <style>{customStyles}</style>
-      {toast.show && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-gray-900 text-white px-6 py-3 rounded-full text-sm font-medium shadow-xl">{toast.message}</div>
-      )}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
-        <div className="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center">
-            <button onClick={() => setIsMenuOpen(true)} className="p-2 -ml-2 text-gray-600 hover:text-black transition-colors"><Icon name="Menu" className="w-6 h-6" /></button>
-            <h1 className="text-lg font-black ml-2 tracking-tight">TastingNote</h1>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {user && !user.isAnonymous ? (
-              <button onClick={() => { setNicknameInput(userProfile.nickname); setShowNicknameModal(true); }} className="text-xs font-black bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100 max-w-[100px] truncate hover:bg-indigo-100 transition-colors">👤 {userProfile.nickname} ✏️</button>
-            ) : (
-              <button
-                onClick={handleGoogleLogin}
-                className="text-xs font-bold text-gray-600 hover:text-black bg-gray-50 border border-gray-200 hover:bg-gray-100 px-2.5 py-1.5 rounded-full transition-all"
-              >
-                로그인
-              </button>
-            )}
-
-            <button onClick={() => { resetForm(); navigateTo('add'); }} className="text-sm font-bold bg-gray-900 hover:bg-black text-white px-3 py-1.5 rounded-full flex items-center shadow-sm transition-colors">
-              <Icon name="PlusCircle" className="w-4 h-4 mr-1" /> 새 리뷰
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className={`fixed inset-0 bg-black/50 z-40 transition-opacity ${isMenuOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={() => setIsMenuOpen(false)}>
-        <div className={`absolute top-0 left-0 w-64 h-full bg-white shadow-2xl transition-transform ${isMenuOpen ? 'translate-x-0' : '-translate-x-full'}`} onClick={e => e.stopPropagation()}>
-          <div className="p-5 border-b bg-gray-50 flex justify-between items-center">
-            <h2 className="font-black text-lg">메뉴</h2>
-            <button onClick={() => setIsMenuOpen(false)}><Icon name="X" className="w-5 h-5 text-gray-500" /></button>
-          </div>
-          <nav className="p-3 space-y-1">
-            <button onClick={() => { resetForm(); navigateTo('add'); }} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'add' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="PlusCircle" className="w-5 h-5 mr-3" /> 새 노트 작성</button>
-            <button onClick={() => navigateTo('list')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'list' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="List" className="w-5 h-5 mr-3" /> 내 테이스팅 노트</button>
-            <button onClick={() => navigateTo('insights')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'insights' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="BarChart3" className="w-5 h-5 mr-3" /> 나의 취향 분석</button>
-            <div className="my-2 border-t border-gray-100"></div>
-            <button onClick={() => navigateTo('search')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'search' ? 'bg-blue-600 text-white shadow-md' : 'text-blue-600 hover:bg-blue-50'}`}><Icon name="Search" className="w-5 h-5 mr-3" /> 보틀 백과 & 시세 검색</button>
-            <button onClick={() => navigateTo('community')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium mt-1 ${currentView === 'community' ? 'bg-indigo-600 text-white shadow-md' : 'text-indigo-600 hover:bg-indigo-50'}`}><Icon name="Users" className="w-5 h-5 mr-3" /> 보틀 라운지</button>
-          </nav>
-        </div>
-      </div>
-
-      <main className="max-w-md mx-auto p-4 mt-2">
-        {currentView === 'add' && renderAddView()}
-        {currentView === 'list' && renderListView()}
-        {currentView === 'insights' && renderInsightsView()}
-        {currentView === 'search' && renderSearchView()}
-        {currentView === 'community' && renderCommunityView()}
-      </main>
-
-      {showNicknameModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowNicknameModal(false)}>
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border shadow-2xl space-y-5" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-              <h3 className="font-black text-base text-gray-900">👤 내 계정 프로필 관리</h3>
-              <span className="text-[10px] bg-indigo-50 text-indigo-700 font-extrabold px-2 py-0.5 rounded-full">
-                {user && !user.isAnonymous ? "구글 연동 회원" : "익명 정식 회원"}
-              </span>
-            </div>
-
-            {(window.location.hostname.includes('goog') || window.location.protocol === 'blob:') && (
-              <p className="text-[11px] text-indigo-600 bg-indigo-50/70 p-3.5 rounded-xl font-bold leading-relaxed">
-                ℹ️ 현재 샌드박스 임베드 뷰어 내부 보안 설정으로 소셜 로그인 대신 커스텀 회원 생성이 자동 활성화되었습니다. 설정한 닉네임으로 시음 후기 및 라운지 참여가 정식 연동됩니다!
-              </p>
-            )}
-
-            <div className="space-y-1.5">
-              <label className="block text-xs font-black text-gray-400 pl-0.5">닉네임 설정</label>
-              <input
-                type="text"
-                value={nicknameInput}
-                onChange={e => setNicknameInput(e.target.value)}
-                placeholder="변경할 닉네임을 입력하세요"
-                className="w-full border rounded-xl px-4 py-3 bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-bold shadow-inner"
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={() => setShowNicknameModal(false)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-2.5 rounded-xl text-xs transition-colors">닫기</button>
-              <button onClick={handleUpdateNickname} className="flex-1 bg-gray-900 hover:bg-black text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-colors">프로필 저장</button>
-            </div>
-
-            {user && !user.isAnonymous && (
-              <div className="pt-2 border-t border-gray-100">
-                <button
-                  onClick={handleLogout}
-                  className="w-full bg-rose-50 hover:bg-rose-100 text-rose-600 font-black py-2.5 rounded-xl text-xs border border-rose-200/60 transition-all flex items-center justify-center gap-1 active:scale-95"
-                >
-                  👋 앱에서 로그아웃하기 (익명 전환)
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showLoginModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowLoginModal(false)}>
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm border shadow-2xl space-y-5" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-              <h3 className="font-black text-base text-gray-900">🔒 소셜 로그인 연동</h3>
-              <button onClick={() => setShowLoginModal(false)} className="p-1 text-xs text-gray-400">X</button>
-            </div>
-            <div className="space-y-3">
-              <button 
-                onClick={handleGoogleLogin}
-                className="w-full py-3 bg-white hover:bg-gray-50 border border-gray-200 rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95"
-              >
-                🌐 Google 계정으로 1초 로그인
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showRankModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowRankModal(false)}>
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm max-h-[75vh] overflow-y-auto border shadow-2xl space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-black text-lg text-gray-900">👑 명예 칭호 획득 기준</h3>
-              <button onClick={() => setShowRankModal(false)} className="p-1 bg-gray-100 rounded-full text-xs font-bold px-2">닫기</button>
-            </div>
-            <p className="text-xs text-gray-400 border-b pb-2">라운지에 공유한 보틀들이 획득한 '누적 부러움 총점'에 따라 계급이 실시간으로 결정됩니다.</p>
-            <div className="space-y-1.5 text-sm">
-              {[
-                { s: '2000점 이상', n: '🐉 10. 주신(酒神)' },
-                { s: '1000점 이상', n: '🌌 9. 술의 요정' },
-                { s: '500점 이상', n: '👑 8. 주류계의 대부' },
-                { s: '300점 이상', n: '🥃 7. 캐스크 마스터' },
-                { s: '150점 이상', n: '🍷 6. 소믈리에' },
-                { s: '100점 이상', n: '🍸 5. 바텐더' },
-                { s: '60점 이상', n: '🍶 4. 미식가' },
-                { s: '30점 이상', n: '🍺 3. 동네 술꾼' },
-                { s: '10점 이상', n: '🍼 2. 혼술러' },
-                { s: '0점 이상', n: '🥚 1. 알콜 입문자' }
-              ].map(r => (
-                <div key={r.n} className="flex justify-between py-1.5 border-b border-gray-50 last:border-0 font-medium font-bold font-black">
-                  <span className="text-gray-800">{r.n}</span>
-                  <span className="text-indigo-600 font-bold text-xs bg-indigo-50 px-2 py-0.5 rounded-full">{r.s}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedDetailNote && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setSelectedDetailNote(null)}>
-          <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto space-y-5 border shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] bg-indigo-50 text-indigo-800 font-bold px-2 py-0.5 rounded uppercase border border-indigo-100">
-                  {selectedDetailNote.wineStyle ? `${selectedDetailNote.wineStyle === 'white' ? '🥂 화이트 와인' : selectedDetailNote.wineStyle === 'sparkling' ? '🍾 스파클링' : selectedDetailNote.wineStyle === 'dessert' ? '🍯 디저트 와인' : '🍷 레드 와인'}` : (selectedDetailNote.analysisResult?.type || '주류')}
-                </span>
-                <h3 className="font-black text-xl text-gray-900 mt-1 break-all">{selectedDetailNote.analysisResult?.name}</h3>
-                <p className="text-[10px] text-gray-400 font-bold mt-1">시음일: {formatTimeAgo(selectedDetailNote.createdAt)}</p>
-              </div>
-              <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><Icon name="X" className="w-5 h-5 text-gray-500" /></button>
-            </div>
-
-            {selectedDetailNote.thumbnail && (
-              <div className="w-full h-32 rounded-xl overflow-hidden border border-gray-100 shadow-inner">
-                <img src={selectedDetailNote.thumbnail} className="w-full h-full object-cover" alt="Bottle preview" />
-              </div>
-            )}
-
-            <div className="bg-slate-50 p-3.5 rounded-2xl border border-gray-100 text-xs">
-              <span className="text-gray-400 block text-[10px] uppercase font-black mb-1">생산지 및 원산지 정보</span>
-              <span className="font-black text-slate-800 break-all leading-normal">{selectedDetailNote.analysisResult?.region || '정보없음'}</span>
-            </div>
-
-            {selectedDetailNote.visual && (selectedDetailNote.visual.color || selectedDetailNote.visual.clarity) && (
-              <div className="bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100/40 space-y-2">
-                <h4 className="text-xs font-black text-indigo-700 flex items-center gap-1">👁️ 눈으로 보는 시각 관찰 기록</h4>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="bg-white p-2 rounded-xl border border-indigo-100/10">
-                    <span className="block text-[9px] text-gray-400">색상 (Color)</span>
-                    <span className="text-xs font-extrabold text-indigo-900">{selectedDetailNote.visual.color || '기록없음'}</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl border border-indigo-100/10">
-                    <span className="block text-[9px] text-gray-400">투명도 (Clarity)</span>
-                    <span className="text-xs font-extrabold text-indigo-900">{selectedDetailNote.visual.clarity || '기록없음'}</span>
-                  </div>
-                  <div className="bg-white p-2 rounded-xl border border-indigo-100/10">
-                    <span className="block text-[9px] text-gray-400">점도 (Viscosity)</span>
-                    <span className="text-xs font-extrabold text-indigo-900">{selectedDetailNote.visual.viscosity || '기록없음'}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
-              <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">📊  테이스팅 맛 밸런스 지표</h4>
-              {selectedDetailNote.originalRatings || selectedDetailNote.ratings ? Object.entries(selectedDetailNote.originalRatings || selectedDetailNote.ratings).map(([key, val]) => { if (typeof val === 'object' || !['sweetness', 'acidity', 'tannin', 'body', 'peat', 'spicy', 'finish', 'bitterness', 'carbonation', 'malt', 'hop', 'umami', 'mousse', 'complexity'].includes(key)) return null; return (<div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0"> <span className="text-gray-600">{key === 'sweetness' ? '당도(단맛)' : key === 'acidity' ? '산도(신맛)' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'peat' ? '피트향' : key === 'spicy' ? '스파이시' : key === 'finish' ? '피니시' : key === 'bitterness' ? '쓴맛(IBU)' : key === 'carbonation' ? '탄산감' : key === 'malt' ? '몰트 풍미' : key === 'hop' ? '홉 풍미' : key === 'umami' ? '감칠맛' : key === 'mousse' ? '기포감' : key === 'complexity' ? '복합미' : key.toUpperCase()}</span> <span className="text-indigo-600 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span> </div>); }) : <p className="text-xs text-gray-400 text-center py-2">기록된 세부 슬라이더 지표가 없습니다.</p>}
-            </div>
-
-            {selectedDetailNote.selectedAromas && selectedDetailNote.selectedAromas.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">🌿  감지된 아로마 & 부케 노트</h4>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedDetailNote.selectedAromas.map(aroma => (
-                    <span key={aroma} className="bg-emerald-50 text-emerald-800 text-xs font-extrabold px-3 py-1 rounded-full border border-emerald-100"># {aroma}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {selectedDetailNote.finish && (selectedDetailNote.finish.length || selectedDetailNote.finish.evolutionFirst) && (
-              <div className="bg-amber-50/30 p-4 rounded-2xl border border-indigo-100/40 space-y-3">
-                <h4 className="text-xs font-black text-amber-800 flex items-center gap-1">⏳ 목 넘김 후 피니시 & 변화 기록</h4>
-                <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-                  <div className="bg-white p-2.5 rounded-xl border border-amber-100/10">
-                    <span className="block text-[9px] text-gray-400">여운의 길이</span>
-                    <span className="text-amber-950 mt-0.5 block">{selectedDetailNote.finish.length || '기록없음'}</span>
-                  </div>
-                  <div className="bg-white p-2.5 rounded-xl border border-amber-100/10">
-                    <span className="block text-[9px] text-gray-400">처음 느낌</span>
-                    <span className="text-amber-950 mt-0.5 block">{selectedDetailNote.finish.evolutionFirst || '기록없음'}</span>
-                  </div>
-                  <div className="col-span-2 bg-white p-2.5 rounded-xl border border-indigo-100/10 flex justify-between items-center">
-                    <span className="text-[9px] text-gray-400">시간 경과 후 더 맛있어졌나요?</span>
-                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-extrabold">{selectedDetailNote.finish.evolutionBetter || '기록없음'}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {selectedDetailNote.foodPairing && (
-              <div className="bg-slate-50 p-4 rounded-2xl border border-gray-100 space-y-1.5">
-                <h4 className="text-xs font-black text-gray-500 flex items-center gap-1">🍽️ 함께하면 좋은 음식 페어링</h4>
-                <p className="text-xs font-extrabold text-gray-700 italic bg-white p-2.5 rounded-xl border border-gray-100">"{selectedDetailNote.foodPairing}"</p>
-              </div>
-            )}
-            
-            {selectedDetailNote.personalNotes && (
-              <div className="bg-slate-50 p-4 rounded-2xl border border-gray-100 space-y-1.5">
-                <h4 className="text-xs font-black text-gray-500 flex items-center gap-1">✏️ 시음 평 및 메모</h4>
-                <p className="text-xs font-bold text-gray-700 bg-white p-2.5 rounded-xl border border-gray-100">"{selectedDetailNote.personalNotes}"</p>
-              </div>
-            )}
-
-            <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-200/50 flex justify-between items-center text-xs font-bold">
-              <span className="text-amber-900 flex items-center gap-1">🏆 종합 만족도 점수</span>
-              <span className="text-amber-600 bg-white border px-3 py-1 rounded-full text-sm font-black font-mono tracking-tight shadow-sm">
-                {selectedDetailNote.overallRating100 || (selectedDetailNote.overallRating ? selectedDetailNote.overallRating * 20 : 0)} / 100 점
-              </span>
-            </div>
-
-            <div className="flex gap-2 pt-2 border-t border-gray-100">
-              <button 
-                type="button"
-                onClick={() => {
-                  setEditingNoteId(selectedDetailNote.id);
-                  setSelectedLiquorType(selectedDetailNote.liquorType);
-                  setWineStyle(selectedDetailNote.wineStyle || 'red');
-                  setAnalysisResult(selectedDetailNote.analysisResult);
-                  setImage(selectedDetailNote.thumbnail);
-                  setPrice(selectedDetailNote.price || '');
-                  setVintage(selectedDetailNote.analysisResult?.vintage || '');
-                  setRatings(selectedDetailNote.ratings || {});
-                  setSelectedAromas(selectedDetailNote.selectedAromas || []);
-                  setPersonalNotes(selectedDetailNote.personalNotes || '');
-                  setOverallRating100(selectedDetailNote.overallRating100 || (selectedDetailNote.overallRating ? selectedDetailNote.overallRating * 20 : 80));
-                  
-                  setWineColor(selectedDetailNote.visual?.color || '');
-                  setWineClarity(selectedDetailNote.visual?.clarity || '');
-                  setWineViscosity(selectedDetailNote.visual?.viscosity || '');
-                  setFinishLength(selectedDetailNote.finish?.length || '');
-                  setEvolutionFirst(selectedDetailNote.finish?.evolutionFirst || '');
-                  setEvolutionBetter(selectedDetailNote.finish?.evolutionBetter || '');
-                  setFoodPairing(selectedDetailNote.foodPairing || '');
-
-                  setSelectedDetailNote(null);
-                  navigateTo('add');
-                  showToast("기존 기록이 복구되었습니다. 수정 후 다시 저장해 주세요!", "info");
-                }}
-                className="flex-1 bg-slate-900 hover:bg-black text-white text-xs font-bold py-3 rounded-xl transition-all shadow active:scale-95 flex items-center justify-center gap-1"
-              >
-                ✏️ 수정하기 (Edit)
-              </button>
-              <button 
-                type="button"
-                onClick={() => setSelectedDetailNote(null)} 
-                className="flex-1 bg-gray-150 hover:bg-gray-200 text-gray-600 text-xs font-bold py-3 rounded-xl transition-all"
-              >
-                닫기
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedImage && (
-        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedImage(null)}>
-          <button onClick={() => setSelectedImage(null)} className="absolute top-4 right-4 p-2 text-white/70 hover:text-white bg-black/50 rounded-full backdrop-blur-sm transition-colors">
-            <Icon name="X" className="w-6 h-6" />
-          </button>
-          <div className="max-w-full max-h-[80vh] relative" onClick={e => e.stopPropagation()}>
-            <img src={selectedImage} alt="Enlarged preview" className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl border border-white/10" />
-          </div>
-        </div>
-      )}
-
-      {selectedDetailNote && isCommunityModal && (
-        <div className="fixed inset-0 z-40 bg-black/70 flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setSelectedDetailNote(null)}>
-          <div className="bg-white rounded-3xl w-full max-w-md max-h-[85vh] overflow-y-auto space-y-4 border shadow-2xl relative" onClick={e => e.stopPropagation()}>
-
-            <div className="p-4 border-b flex justify-between items-center bg-gray-50/50 sticky top-0 z-10 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-gray-400">보틀 라운지 상세보기</span>
-              </div>
-              <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors">
-                <Icon name="X" className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-4">
-
-              <div className="w-full aspect-video bg-gray-50 rounded-2xl overflow-hidden border relative shadow-inner">
-                {selectedDetailNote.thumbnail ? (
-                  <img src={selectedDetailNote.thumbnail} className="w-full h-full object-cover" alt="Detail Bottle" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-5xl">
-                    {LIQUOR_CONFIG[selectedDetailNote.liquorType]?.icon || '🍷'}
-                  </div>
-                )}
-                <div className="absolute bottom-2 left-2 bg-black/60 text-white font-black text-[10px] px-2 py-0.5 rounded-md backdrop-blur-sm">
-                  {selectedDetailNote.wineStyle ? `${selectedDetailNote.wineStyle === 'white' ? '🥂 화이트 와인' : selectedDetailNote.wineStyle === 'sparkling' ? '🍾  스파클링' : selectedDetailNote.wineStyle === 'dessert' ? '🍯  디저트 와인' : '🍷  레드 와인'}` : (selectedDetailNote.analysisResult?.type || '주류')}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <h3 className="font-black text-lg text-gray-900 leading-tight break-all">{selectedDetailNote.analysisResult?.name || '이름 없음'}</h3>
-                <div className="flex items-center gap-2 text-xs text-gray-400 font-bold">
-                  <span>by {selectedDetailNote.userName || '지나간 보틀러'}</span>
-                  <span>•</span>
-                  <span>{formatTimeAgo(selectedDetailNote.createdAt)}</span>
-                </div>
-              </div>
-
-              <div className="bg-indigo-50/40 border border-indigo-100/60 p-3.5 rounded-2xl space-y-1.5">
-                <div className="flex justify-between items-center text-xs font-black text-indigo-950">
-                  <span className="flex items-center gap-0.5">⭐ 누적 부러움 점수</span>
-                  <span className="text-indigo-600 font-mono">{(selectedDetailNote.totalCommunityScore || 0).toFixed(1)} 점</span>
-                </div>
-                <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden transition-all duration-500" style={{ width: `${Math.min(100, ((selectedDetailNote.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
-              </div>
-
-              {/* 상세 국가 표시 카드 - 끊기지 않고 유연하게 자동 줄바꿈 */}
-              <div className="bg-slate-50 p-3.5 rounded-2xl border border-gray-100 text-xs">
-                <span className="text-gray-400 block text-[10px] uppercase font-black mb-1">생산지 및 원산지 정보</span>
-                <span className="font-black text-slate-800 break-all leading-normal">{selectedDetailNote.analysisResult?.region || '정보없음'}</span>
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
-                <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">📊 테이스팅 맛 밸런스 지표</h4>
-                {selectedDetailNote.originalRatings || selectedDetailNote.ratings ? Object.entries(selectedDetailNote.originalRatings || selectedDetailNote.ratings).map(([key, val]) => { if (typeof val === 'object' || !['sweetness', 'acidity', 'tannin', 'body', 'peat', 'spicy', 'finish', 'bitterness', 'carbonation', 'malt', 'hop', 'umami', 'mousse'].includes(key)) return null; return (<div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0"> <span className="text-gray-600">{key === 'sweetness' ? '당도(단맛)' : key === 'acidity' ? '산도(신맛)' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'peat' ? '피트향' : key === 'spicy' ? '스파이시' : key === 'finish' ? '피니시' : key === 'bitterness' ? '쓴맛(IBU)' : key === 'carbonation' ? '탄산감' : key === 'malt' ? '몰트 풍미' : key === 'hop' ? '홉 풍미' : key === 'umami' ? '감칠맛' : key === 'mousse' ? '기포감' : key.toUpperCase()}</span> <span className="text-indigo-600 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span> </div>); }) : <p className="text-xs text-gray-400 text-center py-2">기록된 세부 슬라이더 지표가 없습니다.</p>}
-              </div>
-
-              {/* 아로마 표시 */}
-              {selectedDetailNote.selectedAromas && selectedDetailNote.selectedAromas.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">🌿 감지된 아로마 & 부케 노트</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {selectedDetailNote.selectedAromas.map(aroma => (
-                      <span key={aroma} className="bg-emerald-50 text-emerald-800 text-xs font-extrabold px-3 py-1 rounded-full border border-emerald-100"># {aroma}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* ⏳ 피니시 여운 및 에볼루션 표시 */}
-              {selectedDetailNote.finish && (selectedDetailNote.finish.length || selectedDetailNote.finish.evolutionFirst) && (
-                <div className="bg-amber-50/30 p-4 rounded-2xl border border-indigo-100/40 space-y-3">
-                  <h4 className="text-xs font-black text-amber-800 flex items-center gap-1">⏳ 목 넘김 후 피니시 & 변화 기록</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-                    <div className="bg-white p-2.5 rounded-xl border border-amber-100/10">
-                      <span className="block text-[9px] text-gray-400">여운의 길이</span>
-                      <span className="text-amber-950 mt-0.5 block">{selectedDetailNote.finish.length || '기록없음'}</span>
-                    </div>
-                    <div className="bg-white p-2.5 rounded-xl border border-amber-100/10">
-                      <span className="block text-[9px] text-gray-400">처음 느낌</span>
-                      <span className="text-amber-950 mt-0.5 block">{selectedDetailNote.finish.evolutionFirst || '기록없음'}</span>
-                    </div>
-                    <div className="col-span-2 bg-white p-2.5 rounded-xl border border-indigo-100/10 flex justify-between items-center">
-                      <span className="text-[9px] text-gray-400">시간 경과 후 더 맛있어졌나요?</span>
-                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-extrabold">{selectedDetailNote.finish.evolutionBetter || '기록없음'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 페어링 */}
-              {selectedDetailNote.foodPairing && (
-                <div className="bg-slate-50 p-4 rounded-2xl border border-gray-100 space-y-1.5">
-                  <h4 className="text-xs font-black text-gray-500 flex items-center gap-1">🍽️ 함께하면 좋은 음식 페어링</h4>
-                  <p className="text-xs font-extrabold text-gray-700 italic bg-white p-2.5 rounded-xl border border-gray-100">"{selectedDetailNote.foodPairing}"</p>
-                </div>
-              )}
-
-              {selectedDetailNote.personalNotes && (
-                <div className="text-sm text-gray-700 bg-slate-50 p-4 rounded-2xl border border-gray-100 font-medium leading-relaxed italic">
-                  "{selectedDetailNote.personalNotes}"
-                </div>
-              )}
-
-              <div className="border-t border-gray-100 pt-3 space-y-3.5">
-                <div className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-xl border border-gray-200/60 shadow-inner gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-black text-gray-500 tracking-tight">부러움 점수 드래그 평가</p>
-                  </div>
-                  {selectedDetailNote.ratings?.[user?.uid] > 0 && selectedDetailNote.comments?.some(c => c.userId === user?.uid) ? (
-                    <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-sm whitespace-nowrap">
-                      🔒 평가 완료 ({(selectedDetailNote.ratings?.[user?.uid] || 0).toFixed(1)}점)
-                    </div>
-                  ) : (
-                    <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; handleRatePost(selectedDetailNote.id, selectedDetailNote.ratings, calculated); }}>
-                      <FractionalStarRating value={selectedDetailNote.ratings?.[user?.uid] || 0} onChange={(score) => handleRatePost(selectedDetailNote.id, selectedDetailNote.ratings, score)} />
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs font-black text-gray-800 flex items-center gap-1">💬 댓글 채팅 목록 ({selectedDetailNote.comments?.length || 0}개)</p>
-                  <div className="space-y-3 max-h-[200px] overflow-y-auto pr-1">
-                    {(selectedDetailNote.comments || []).map(c => {
-                      const commenterRating = selectedDetailNote.ratings?.[c.userId] || 0;
-                      const commenterStats = userStats[c.userId] || { badge: '🥚 알콜 입문자' };
-
-                      return (
-                        <div key={c.id} className="space-y-1.5 border-b border-gray-100/50 pb-2 last:border-0">
-                          <div className="text-xs bg-gray-50 p-2.5 rounded-xl border border-gray-100 shadow-sm space-y-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="text-[10px] shrink-0">{commenterStats.badge ? commenterStats.badge.split(' ')[0] : '🥚'}</span>
-                              <span className="font-bold text-gray-700">{c.userName || '알콜러'}</span>
-                              {commenterRating > 0 && <span className="text-[9px] text-amber-500 font-black shrink-0 ml-0.5">★ {commenterRating.toFixed(1)}</span>}
-                              <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
-                            </div>
-                            <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
-                            <div className="text-right">
-                              <button onClick={() => setActiveReplyBox(activeReplyBox === c.id ? null : c.id)} className="text-[10px] font-bold text-indigo-600 hover:underline mt-1">
-                                {activeReplyBox === c.id ? '취소' : '↳ 답글 달기'}
-                              </button>
-                            </div>
-                          </div>
-
-                          {(c.replies || []).map(r => {
-                            const replyStats = userStats[r.userId] || { badge: '🥚 알콜 입문자' };
-                            return (
-                              <div key={r.id} className="ml-5 text-xs bg-gray-50/80 p-2 rounded-xl border border-dashed border-gray-200 space-y-1 flex gap-1.5 items-start">
-                                <span className="text-gray-400 text-[11px] mt-0.5 shrink-0">↳</span>
-                                <div className="flex-1 space-y-0.5">
-                                  <div className="flex items-center gap-1 flex-wrap">
-                                    <span className="text-[10px] shrink-0">{replyStats.badge ? replyStats.badge.split(' ')[0] : '🥚'}</span>
-                                    <span className="font-bold text-gray-700">{r.userName || '알콜러'}</span>
-                                    <span className="text-[8px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(r.createdAt)}</span>
-                                  </div>
-                                  <p className="text-gray-600 font-medium pl-0.5">{r.text}</p>
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                          {activeReplyBox === c.id && (
-                            <div className="ml-5 flex gap-1.5 pt-1 animate-in slide-in-from-top-2 duration-200">
-                              <input type="text" placeholder="답글 내용을 입력하세요..." value={replyInputs[c.id] || ''} onChange={(e) => setReplyInputs(p => ({ ...p, [c.id]: e.target.value }))} onKeyDown={(e) => e.key === 'Enter' && handleAddReply(selectedDetailNote.id, c.id)} className="flex-1 border rounded-xl px-2.5 py-1.5 bg-white text-[11px] font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner" />
-                              <button onClick={() => handleAddReply(selectedDetailNote.id, c.id)} className="bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl shrink-0 shadow-sm">등록</button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-1 border-t border-gray-100">
-                  <input
-                    type="text"
-                    placeholder="매너 있는 댓글 한마디를 남겨보세요!"
-                    value={commentInputs[selectedDetailNote.id] || ''}
-                    onChange={(e) => setCommentInputs(p => ({ ...p, [selectedDetailNote.id]: e.target.value }))}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddComment(selectedDetailNote.id)}
-                    className="flex-1 border rounded-xl px-3 py-2 bg-white text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-inner"
-                  />
-                  <button onClick={() => handleAddComment(selectedDetailNote.id)} className="bg-gray-800 hover:bg-black text-white w-8 h-8 rounded-full flex items-center justify-center transition-colors shrink-0 shadow-md">
-                    <Icon name="Send" className="w-3 h-3 ml-0.5" />
-                  </button>
-                </div>
-              </div>
-
-            </div>
-          </div>
-        </div>
-      )}
-
-    </div>
-  );
-}
+                <span className="text-[10px] uppercase text-emerald-
