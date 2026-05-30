@@ -4,7 +4,7 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDocs } from 'firebase/firestore';
 
 const fallbackConfig = {
-  apiKey: "AIzaSyDfsow7Q73INwwaFylX4De6LwKrmEDovcE",
+  apiKey: "AIzaSyBPh3sbeDslXC7A1JT5Xl6SM-TxwJ0D8Bo",
   authDomain: "chill-sip.firebaseapp.com",
   projectId: "chill-sip",
   storageBucket: "chill-sip.firebasestorage.app",
@@ -18,20 +18,16 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Safe app UID binding
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'wine-tasting-app';
 const appId = rawAppId.replace(/\//g, '_');
 
-// VITE env standard binding with dynamic fallback
-const GEMINI_API_KEY = (() => {
-  try {
-    return import.meta.env.VITE_GEMINI_API_KEY || "";
-  } catch (e) {
-    return "";
-  }
-})();
-
-const isApiKeyMissing = !GEMINI_API_KEY || GEMINI_API_KEY.trim() === "";
+const apiKey = typeof process !== 'undefined' && process.env.REACT_APP_GEMINI_API_KEY 
+  ? process.env.REACT_APP_GEMINI_API_KEY 
+  : (typeof __webpack_env__ !== 'undefined' && __webpack_env__.REACT_APP_GEMINI_API_KEY 
+     ? __webpack_env__.REACT_APP_GEMINI_API_KEY 
+     : (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY
+        ? import.meta.env.VITE_GEMINI_API_KEY
+        : ""));
 
 // 샴페인 전용 기포 상승 애니메이션 효과 스타일시트 상수 정의 (탑레벨 모듈 호이스팅 배치)
 const customStyles = `
