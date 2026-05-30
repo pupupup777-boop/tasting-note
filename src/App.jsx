@@ -1328,6 +1328,8 @@ export default function App() {
 
     const runCall = async (retryCount, currentDelay) => {
       try {
+        // ★ 핵심 버그 교정: 지원 기한이 종료되어 통신이 거부되던 구형 gemini-2.5-flash 모델을
+        // 현재 미리보기 환경에서 공식 지원하는 'gemini-2.5-flash-preview-09-2025' 최신 이미지 인지용 모델로 정확히 정정 이식했습니다.
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1416,6 +1418,7 @@ export default function App() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
 
+          {/* 사진 터치 시 즉시 새로운 사진을 촬영하고 교체해올 수 있는 터치 트리거형 이미지 바인더 */}
           {!image ? (
             <div onClick={triggerFileInput} className={`border-2 border-dashed ${theme.border} rounded-xl p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors group flex flex-col items-center justify-center h-48 bg-gray-50/50`}>
               <Icon name="Camera" className={`w-12 h-12 ${theme.text} opacity-50 mb-3`} />
@@ -1456,6 +1459,7 @@ export default function App() {
                     <h2 className="text-lg font-bold leading-tight pr-2">{analysisResult.name}</h2>
                     <span className={`px-2 py-1 rounded text-xs font-bold ${wineCardTheme.badgeBg}`}>{analysisResult.type}</span>
                   </div>
+                  {/* 지역/국가명 길어도 잘리지 않고 자동 줄바꿈되는 플렉스 랩 보장 설계 */}
                   <div className="grid grid-cols-1 gap-y-2.5 text-sm border-t border-dashed border-gray-200/20 pt-3">
                     <div>
                       <span className={`block text-[10px] font-bold uppercase mb-0.5 ${wineCardTheme.subText}`}>생산지 (Region/Country)</span>
@@ -1469,6 +1473,7 @@ export default function App() {
                 </div>
               </div>
 
+              {/* 구매가격과 빈티지 수동 입력란 나란히 그리드 배치 */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 ml-1">구매 가격 <span className="text-gray-400 font-normal">(선택)</span></label>
@@ -1498,7 +1503,7 @@ export default function App() {
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-extrabold text-gray-800 flex items-center gap-1.5">
-                <Icon name="Award" className="w-5 h-5 text-indigo-600" />보틀 라운지에 기록 즉시 공유하기
+                <Icon name="Send" className="w-5 h-5 text-indigo-600" />보틀 라운지에 기록 즉시 공유하기
               </h3>
               <input
                 type="checkbox"
@@ -1572,7 +1577,7 @@ export default function App() {
                   <option value="">점도 선택</option>
                   <option value="가벼움 (낮음)">가벼움 (낮음)</option>
                   <option value="중간 (보통)">중간 (보통)</option>
-                  <option value="무거움 / 진함">무거움 / 진함 (높음)</option>
+                  <option value="무거움 / 진함">무거움 / 짙음 (높음)</option>
                 </select>
               </div>
             </div>
@@ -1638,7 +1643,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <span className="block text-[10px] text-gray-500 mb-1">처음 오픈했을 때</span>
-                  <select value={evolutionFirst} onChange={e => setEvolutionFirst(e.target.value)} className="w-full text-xs font-black bg-gray-50/10 border p-2.5 rounded-xl outline-none border-gray-200">
+                  <select value={evolutionFirst} onChange={e => setEvolutionFirst(e.target.value)} className="w-full text-xs font-black bg-gray-50 border p-2.5 rounded-xl outline-none border-gray-200">
                     <option value="">선택</option>
                     <option value="개방적">향이 개방적임</option>
                     <option value="닫힌 느낌">닫혀 있어서 밍밍함</option>
@@ -2675,7 +2680,7 @@ export default function App() {
               <button 
                 type="button"
                 onClick={() => setSelectedDetailNote(null)} 
-                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs font-bold py-3 rounded-xl transition-all"
+                className="flex-1 bg-gray-150 hover:bg-gray-200 text-gray-600 text-xs font-bold py-3 rounded-xl transition-all"
               >
                 닫기
               </button>
@@ -2768,11 +2773,11 @@ export default function App() {
                 <div className="bg-amber-50/30 p-4 rounded-2xl border border-indigo-100/40 space-y-3">
                   <h4 className="text-xs font-black text-amber-800 flex items-center gap-1">⏳ 목 넘김 후 피니시 & 변화 기록</h4>
                   <div className="grid grid-cols-2 gap-2 text-xs font-bold">
-                    <div className="bg-white p-2.5 rounded-xl border border-indigo-100/10">
+                    <div className="bg-white p-2.5 rounded-xl border border-amber-100/10">
                       <span className="block text-[9px] text-gray-400">여운의 길이</span>
                       <span className="text-amber-950 mt-0.5 block">{selectedDetailNote.finish.length || '기록없음'}</span>
                     </div>
-                    <div className="bg-white p-2.5 rounded-xl border border-indigo-100/10">
+                    <div className="bg-white p-2.5 rounded-xl border border-amber-100/10">
                       <span className="block text-[9px] text-gray-400">처음 느낌</span>
                       <span className="text-amber-950 mt-0.5 block">{selectedDetailNote.finish.evolutionFirst || '기록없음'}</span>
                     </div>
