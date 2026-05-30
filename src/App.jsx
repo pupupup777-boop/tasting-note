@@ -4,7 +4,7 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, 
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDocs } from 'firebase/firestore';
 
 const fallbackConfig = {
-  apiKey: "AIzaSyDfsow7Q73INwwaFylX4De6LwKrmEDovcE",
+  apiKey: "AIzaSyBPh3sbeDslXC7A1JT5Xl6SM-TxwJ0D8Bo",
   authDomain: "chill-sip.firebaseapp.com",
   projectId: "chill-sip",
   storageBucket: "chill-sip.firebasestorage.app",
