@@ -21,7 +21,13 @@ const db = getFirestore(app);
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'wine-tasting-app';
 const appId = rawAppId.replace(/\//g, '_');
 
-const apiKey = ""; 
+const apiKey = typeof process !== 'undefined' && process.env.REACT_APP_GEMINI_API_KEY 
+  ? process.env.REACT_APP_GEMINI_API_KEY 
+  : (typeof __webpack_env__ !== 'undefined' && __webpack_env__.REACT_APP_GEMINI_API_KEY 
+     ? __webpack_env__.REACT_APP_GEMINI_API_KEY 
+     : (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY
+        ? import.meta.env.VITE_GEMINI_API_KEY
+        : ""));
 
 // 샴페인 전용 기포 상승 애니메이션 효과 스타일시트 상수 정의 (탑레벨 모듈 호이스팅 배치)
 const customStyles = `
