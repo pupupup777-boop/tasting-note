@@ -1294,6 +1294,7 @@ export default function TastingApp() {
         })}
       </div>
     );
+  };
 
     const renderCommunityView = () => {
       let displayedPosts = [...communityPosts];
