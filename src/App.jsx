@@ -302,17 +302,27 @@ export default function TastingApp() {
   // 📊 필터 및 정렬 연산 장치를 컴포넌트 최상단으로 격리 (무한 루프 에러 완치)
   const safeNotes = useMemo(() => Array.isArray(notes) ? notes : [], [notes]);
 
+  // 🗺️ 전 세계 주요 와인 국가 텍스트 사전 표준화 매핑 딕셔너리
+  const getStandardCountry = (regionStr) => {
+    if (!regionStr || regionStr === '-') return null;
+    const lower = regionStr.toLowerCase();
+    if (lower.includes('france') || lower.includes('프랑스') || lower.includes('bourgogne') || lower.includes('burgundy') || lower.includes('bordeaux') || lower.includes('champagne')) return '프랑스';
+    if (lower.includes('italy') || lower.includes('이탈리아') || lower.includes('toscana') || lower.includes('tuscan') || lower.includes(' Piedmont') || lower.includes('bdm')) return '이탈리아';
+    if (lower.includes('chile') || lower.includes('칠레') || lower.includes('colchagua')) return '칠레';
+    if (lower.includes('usa') || lower.includes('america') || lower.includes('미국') || lower.includes('napa') || lower.includes('california')) return '미국';
+    if (lower.includes('spain') || lower.includes('스페인') || lower.includes('rioja')) return '스페인';
+    if (lower.includes('australia') || lower.includes('호주')) return '호주';
+    if (lower.includes('zealand') || lower.includes('뉴질랜드')) return '뉴질랜드';
+    
+    // 매핑에 없으면 공백 기준 첫 단어를 그대로 반환
+    return regionStr.split(/[\s,+/]+/)[0].trim();
+  };
+
   const uniqueRegions = useMemo(() => {
     const countries = new Set();
     safeNotes.forEach(n => {
-      let rawRegion = n?.analysisResult?.region;
-      if (rawRegion && rawRegion !== '-') {
-        // 공백이나 콤마(,) 또는 슬래시(/) 기준으로 단어를 쪼갠 후 맨 앞의 '국가명'만 추출
-        const countryToken = rawRegion.split(/[\s,+/]+/)[0].trim();
-        if (countryToken) {
-          countries.add(countryToken);
-        }
-      }
+      const matchedCountry = getStandardCountry(n?.analysisResult?.region);
+      if (matchedCountry) countries.add(matchedCountry);
     });
     return ['all', ...Array.from(countries)];
   }, [safeNotes]);
@@ -320,27 +330,25 @@ export default function TastingApp() {
   const processedNotes = useMemo(() => {
     let result = [...safeNotes];
 
+    // 1. 와인 스타일 필터
     if (filterStyle && filterStyle !== 'all') {
       result = result.filter(n => (n?.analysisResult?.wineStyle || 'red') === filterStyle);
     }
 
+    // 2. 국가 단위 필터 (영어/세부명 완벽 클렌징 매칭)
     if (filterRegion && filterRegion !== 'all') {
-      result = result.filter(n => {
-        const rawRegion = n?.analysisResult?.region || '';
-        const countryToken = rawRegion.split(/[\s,+/]+/)[0].trim();
-        return countryToken === filterRegion;
-      });
+      result = result.filter(n => getStandardCountry(n?.analysisResult?.region) === filterRegion);
     }
 
+    // 3. 정렬 조건 분기 (가격낮은순 제거 -> 평점높은순 교체 완료)
     result.sort((a, b) => {
-      if (listSortKey === 'priceDesc') return (Number(b?.price || 0)) - (Number(a?.price || 0));
-      if (listSortKey === 'priceAsc') return (Number(a?.price || 0)) - (Number(b?.price || 0));
-      return (b?.createdAt || 0) - (a?.createdAt || 0);
+      if (listSortKey === 'ratingDesc') return (b?.overallRating || 0) - (a?.overallRating || 0); // 평점 높은순
+      if (listSortKey === 'priceDesc') return (Number(b?.price || 0)) - (Number(a?.price || 0)); // 가격 높은순
+      return (b?.createdAt || 0) - (a?.createdAt || 0); // 최신 등록순 기본값
     });
 
     return result;
   }, [safeNotes, listSortKey, filterStyle, filterRegion]);
-
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -1272,14 +1280,14 @@ export default function TastingApp() {
           {/* 상단 헤더 및 가격 정렬 선택 휠 */}
           <div className="flex justify-between items-center">
             <h2 className="text-xs font-black text-gray-800">내 테이스팅 노트 ({processedNotes.length}개)</h2>
-            <select
-              value={listSortKey}
+            <select 
+              value={listSortKey} 
               onChange={(e) => setListSortKey(e.target.value)}
-              className="text-[11px] font-black bg-gray-50 border border-gray-200 rounded-lg p-1.5 outline-none text-gray-700 cursor-pointer"
+              className="text-[11px] font-black bg-gray-50 border border-gray-200 rounded-lg p-1.5 outline-none text-gray-700 cursor-pointer shadow-xs"
             >
               <option value="latest">📅 최신 등록순</option>
+              <option value="ratingDesc">⭐ 평점 높은순</option>
               <option value="priceDesc">💵 가격 높은순</option>
-              <option value="priceAsc">💵 가격 낮은순</option>
             </select>
           </div>
 
