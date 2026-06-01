@@ -3,8 +3,10 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
+const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_FIREBASE_API_KEY_HERE";
+
 const fallbackConfig = {
-  apiKey: "AIzaSyDfsow7Q73INwwaFylX4De6LwKrmEDovcE",
+  apiKey: FIREBASE_API_KEY,
   authDomain: "chill-sip.firebaseapp.com",
   projectId: "chill-sip",
   storageBucket: "chill-sip.firebasestorage.app",
