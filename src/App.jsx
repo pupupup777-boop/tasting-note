@@ -491,7 +491,7 @@ export default function TastingApp() {
 
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
-    
+
     if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === "") {
       showToast("로컬 환경 변수(API 키)를 불러오지 못했습니다. .env 설정을 확인하세요.", "error");
       return;
@@ -557,7 +557,7 @@ export default function TastingApp() {
           const errorText = await response.text();
           throw new Error(`API call failed: ${response.status} - ${errorText}`);
         }
-        
+
         const result = await response.json();
 
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
@@ -605,17 +605,15 @@ export default function TastingApp() {
     const base64Data = base64Image.split(',')[1];
 
     const config = LIQUOR_CONFIG[selectedLiquorType];
-    
-    // 🛠️ 템플릿 리터럴 내부에 변수가 누락 없이 정상 반영되도록 프롬프트 정제
-    const prompt = `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
-    현재 선택한 주종 카테고리는 '${config.name}'입니다.
-    
-    [실물인증코드 OCR 검사]
-    사진 속에 종이 쪽지나 포스트잇에 수작업으로 적은 인증코드 '${verificationCode}' 텍스트가 식별된다면 'isCodeDetected'를 true로, 보이지 않거나 오차가 있으면 false로 판별해주세요.
-    
-    [주종 자동 동기화 보정]
-    만약 현재 업로드된 보틀이 와인인데 위스키로 잘못 선택된 경우처럼 실제 분석된 종류가 다를 경우, 'detectedCategory' 항목에 알맞은 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 자동으로 추론하여 지정해주세요.`;
 
+    // 🛠️ 템플릿 리터럴 내부에 변수가 누락 없이 정상 반영되도록 프롬프트 정제
+    const prompt = `주류 라벨 이미지 분석 요청.
+현재 선택한 주종 카테고리는 '${config.name}'입니다.
+
+${shareToCommunity ? `[실물인증코드 OCR 검사 필수] 사진 속에 종이 쪽지나 포스트잇에 수작업으로 적은 인증코드 '${verificationCode}' 텍스트가 식별된다면 'isCodeDetected'를 true로, 보이지 않거나 오차가 있으면 false로 판별해주세요.` : `[인증 제외] 현재 커뮤니티 공유 모드가 아니므로 'isCodeDetected'는 검사하지 말고 무조건 false로 반환하세요.`}
+
+[주종 자동 동기화 보정]
+실제 분석된 종류가 다를 경우 'detectedCategory' 항목에 알맞은 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 지정해주세요.`;
     const payload = {
       contents: [{
         role: "user", parts: [
@@ -635,8 +633,13 @@ export default function TastingApp() {
             "grape": { type: "STRING", description: "포도 품종, 사용 맥아, 주조미 쌀 품종, 캐스크 정보 등" },
             "producer": { type: "STRING", description: "양조장/증류소/제조업체 명칭" },
             "detectedCategory": { type: "STRING", description: "자동 판정 카테고리 ('wine', 'whiskey', 'sake', 'beer' 중 반드시 택일)" },
-            "isCodeDetected": { type: "BOOLEAN", description: "이미지 내에서 정확한 인증코드 문자열이 인지/판독되었는지 여부" }
-          },
+            "isCodeDetected": { 
+  type: "BOOLEAN", 
+  description: shareToCommunity 
+    ? `이미지 내에서 정확한 인증코드 문자열 '${verificationCode}'가 인지/판독되었는지 여부` 
+    : "현재 공유 모드가 아니므로 검사하지 말고 무조건 false를 반환하세요." 
+}
+},
           required: ["name", "type", "region", "vintage", "grape", "producer", "detectedCategory", "isCodeDetected"]
         }
       }
