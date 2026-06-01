@@ -286,6 +286,7 @@ export default function TastingApp() {
   const [showNicknameModal, setShowNicknameModal] = useState(false);
   const [nicknameInput, setNicknameInput] = useState('');
   const [selectedDetailNote, setSelectedDetailNote] = useState(null);
+  const [editingNoteId, setEditingNoteId] = useState(null); // 수정 중인 노트 ID 저장용
   const [openComments, setOpenComments] = useState({});
   const [showRankModal, setShowRankModal] = useState(false);
 
@@ -759,11 +760,6 @@ export default function TastingApp() {
     try {
       const smallImage = image ? await compressImage(image, 300) : null;
 
-      let verificationStatus = 'ai_verified';
-      if (shareToCommunity) {
-        verificationStatus = analysisResult.isCodeDetected ? 'ai_verified' : 'pending_vote';
-      }
-
       const newNote = {
         liquorType: selectedLiquorType,
         analysisResult,
@@ -776,31 +772,36 @@ export default function TastingApp() {
         createdAt: Date.now()
       };
 
-      const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
-      await addDoc(notesRef, newNote);
+      if (editingNoteId) {
+        // [수정 모드] 기존 파이어스토어 문서를 찾아 정밀 덮어쓰기 업데이트 시행
+        const targetNoteDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'notes', editingNoteId);
+        await updateDoc(targetNoteDocRef, newNote);
+        setEditingNoteId(null); // 수정 완료 후 플래그 초기화
+        showToast("테이스팅 노트가 성공적으로 수정되었습니다!", "success");
+      } else {
+        // [신규 생성 모드] 새 도큐먼트로 추가
+        const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
+        await addDoc(notesRef, newNote);
 
-      if (shareToCommunity) {
-        const communityRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
-        await addDoc(communityRef, {
-          ...newNote,
-          userId: user.uid,
-          userName: userProfile.nickname,
-          totalCommunityScore: 0,
-          ratings: { [user.uid]: overallRating },
-          originalRatings: ratings,
-          comments: [],
-          isVerified: verificationStatus === 'ai_verified',
-          verificationStatus,
-          verificationCodeUsed: verificationCode,
-          votes: {
-            voters: {},
-            yesCount: 0,
-            noCount: 0
-          }
-        });
+        // 커뮤니티 공유 체크 시 라운지 공용 컬렉션에도 동시 등록
+        if (shareToCommunity) {
+          const communityRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
+          await addDoc(communityRef, {
+            ...newNote,
+            userId: user.uid,
+            userName: userProfile.nickname,
+            totalCommunityScore: 0,
+            ratings: { [user.uid]: overallRating },
+            originalRatings: ratings,
+            comments: [],
+            isVerified: true,
+            verificationStatus: 'ai_verified',
+            votes: { voters: {}, yesCount: 0, noCount: 0 }
+          });
+        }
+        showToast("테이스팅 노트가 안전하게 저장되었습니다!", "success");
       }
 
-      showToast("테이스팅 노트가 안전하게 저장되었습니다!");
       resetForm();
       navigateTo('list');
     } catch (err) {
@@ -1075,7 +1076,7 @@ export default function TastingApp() {
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 ml-1">와인 빈티지(생산년도)</label>
                   <input
                     type="text"
-                    value={analysisResult?.vintage || ""}
+                    value={(analysisResult?.vintage === "null" || !analysisResult?.vintage) ? "" : analysisResult.vintage}
                     onChange={(e) => setAnalysisResult(p => ({ ...p, vintage: e.target.value }))}
                     placeholder="예: 2020 또는 NV"
                     className="w-full bg-gray-50 border border-gray-200 text-xs text-gray-900 rounded-xl block p-3 outline-none font-mono font-bold"
@@ -1182,17 +1183,13 @@ export default function TastingApp() {
                 <span className="text-2xl font-black text-rose-700 font-mono bg-white px-3 py-1 rounded-xl shadow-sm border border-rose-100">{overallRating || 50} <span className="text-xs font-medium text-gray-400">점</span></span>
               </div>
 
-              {/* 와인 잔 시각화 애니메이션 기믹 */}
-              <div className="h-10 bg-white border border-gray-200 rounded-xl relative overflow-hidden mb-4 shadow-sm flex items-center pl-3">
+              {/* 심플하고 모던한 와인 컬러 게이지 바 */}
+              <div className="h-4 bg-gray-100 rounded-full relative overflow-hidden mb-4 shadow-inner border border-gray-200/50">
                 <div
-                  className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-rose-700/20 to-rose-900/60 transition-all duration-300"
-                  style={{ width: `${overallRating || 50}%` }}
+                  className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-rose-700 to-rose-950 transition-all duration-300 rounded-full"
+                  style={{ width: `${((overallRating || 50) - 50) / 50 * 100}%` }}
                 />
-                <span className="relative z-10 text-xl animate-bounce">
-                  {(overallRating || 50) >= 95 ? '👑 주신(酒神)의 보틀' : (overallRating || 50) >= 90 ? '💎 최고급 명품 와인' : (overallRating || 50) >= 80 ? '👍 추천할 만한 가치' : '🍼 데일리 가성비 보틀'}
-                </span>
               </div>
-
               <input
                 type="range"
                 min="50"
@@ -1244,10 +1241,29 @@ export default function TastingApp() {
         return (
           <div key={note.id} onClick={() => { setSelectedDetailNote(note); setIsCommunityModal(false); }} className="bg-white p-4 rounded-xl shadow-sm border flex gap-4 hover:shadow-md transition-shadow cursor-pointer active:scale-[0.99]">
             {note.thumbnail && <img src={note.thumbnail} className="w-20 h-20 bg-gray-100 rounded-lg object-cover" />}
-            <div className="flex-1 min-w-0">
-              <div className={`text-[10px] px-2 py-0.5 rounded inline-block font-bold mb-1 uppercase ${theme.bg} ${theme.text}`}>{note.analysisResult?.type}</div>
-              <h3 className="font-bold text-sm text-gray-900 truncate">{note.analysisResult?.name}</h3>
-              <div className="flex items-center text-yellow-500 text-xs mt-1.5 font-bold"><Icon name="Star" className="w-3.5 h-3.5 fill-current text-yellow-500 mr-1" /> {note.overallRating}점</div>
+            <div className="flex-1 min-w-0 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                  <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${theme.bg} ${theme.text}`}>
+                    {note.analysisResult?.wineStyle === 'white' ? '🥂 화이트' : note.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인' : note.analysisResult?.wineStyle === 'desert' ? '🍯 디저트' : '🍷 레드'}
+                  </span>
+                  {note.analysisResult?.vintage && note.analysisResult.vintage !== 'null' && (
+                    <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                      {note.analysisResult.vintage}
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-black text-sm text-gray-900 truncate leading-tight">{note.analysisResult?.name}</h3>
+                {note.personalNotes && (
+                  <p className="text-xs text-gray-500 font-medium mt-1.5 line-clamp-2 bg-gray-50 p-2 rounded-lg border border-gray-100 italic">
+                    "{note.personalNotes}"
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center justify-between text-xs mt-2 pt-1.5 border-t border-gray-50">
+                <span className="text-rose-700 font-black font-mono">★ {note.overallRating || 50}점</span>
+                {note.price ? <span className="text-gray-400 font-bold text-[10px]">₩{Number(note.price).toLocaleString()}</span> : null}
+              </div>
             </div>
           </div>
         );
@@ -1734,15 +1750,25 @@ export default function TastingApp() {
           <div className="bg-white rounded-3xl w-full max-w-md p-6 max-h-[80vh] overflow-y-auto space-y-5 border shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start">
               <div>
-                <span className="text-[10px] bg-indigo-50 text-indigo-800 font-bold px-2 py-0.5 rounded uppercase border border-indigo-100">{selectedDetailNote.analysisResult?.type || '주류'}</span>
-                <h3 className="font-black text-xl text-gray-900 mt-1">{selectedDetailNote.analysisResult?.name}</h3>
+                <span className="text-[10px] bg-rose-50 text-rose-800 font-bold px-2 py-0.5 rounded uppercase border border-rose-100">
+                  {selectedDetailNote.analysisResult?.wineStyle === 'white' ? '🥂 화이트 와인' : selectedDetailNote.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인/스파클링' : selectedDetailNote.analysisResult?.wineStyle === 'desert' ? '🍯 디저트 와인' : '🍷 레드 와인'}
+                </span>
+                <h3 className="font-black text-xl text-gray-900 mt-1 leading-tight">{selectedDetailNote.analysisResult?.name}</h3>
               </div>
               <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><Icon name="X" className="w-5 h-5 text-gray-500" /></button>
             </div>
 
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
-              <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">📊 테이스팅 오각형 밸런스 지표</h4>
-              {selectedDetailNote.originalRatings || selectedDetailNote.ratings ? Object.entries(selectedDetailNote.originalRatings || selectedDetailNote.ratings).map(([key, val]) => { if (typeof val === 'object' || !['sweetness', 'acidity', 'tannin', 'body', 'peat', 'spicy', 'finish'].includes(key)) return null; return (<div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0"> <span className="text-gray-600">{key === 'sweetness' ? '당도' : key === 'acidity' ? '산도' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'peat' ? '피트향' : key === 'spicy' ? '스파이시' : key === 'finish' ? '피니시' : key.toUpperCase()}</span> <span className="text-indigo-600 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span> </div>); }) : <p className="text-xs text-gray-400 text-center py-2">기록된 세부 슬라이더 지표가 없습니다.</p>}
+              <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">📊 맛의 균형 (Palate) 기록</h4>
+              {selectedDetailNote.originalRatings || selectedDetailNote.ratings ? Object.entries(selectedDetailNote.originalRatings || selectedDetailNote.ratings).map(([key, val]) => {
+                if (typeof val === 'object' || !['sweetness', 'acidity', 'tannin', 'body', 'mousse', 'finish', 'balance'].includes(key)) return null;
+                return (
+                  <div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0--------------">
+                    <span className="text-gray-600">{key === 'sweetness' ? '당도' : key === 'acidity' ? '산미' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'mousse' ? '기포감' : key === 'finish' ? '여운' : key === 'balance' ? '균형감' : key.toUpperCase()}</span>
+                    <span className="text-rose-800 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span>
+                  </div>
+                );
+              }) : <p className="text-xs text-gray-400 text-center py-2">기록된 세부 지표가 없습니다.</p>}
             </div>
 
             {selectedDetailNote.selectedAromas && selectedDetailNote.selectedAromas.length > 0 && (
@@ -1755,6 +1781,37 @@ export default function TastingApp() {
                 </div>
               </div>
             )}
+
+            {/* 오늘의 한줄평 상시 노출 구역 */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-gray-100 space-y-1.5">
+              <h4 className="text-xs font-black text-gray-400 uppercase tracking-wider">✍️ 내가 남긴 오늘의 한줄평</h4>
+              <p className="text-sm text-gray-700 font-medium leading-relaxed italic">
+                {selectedDetailNote.personalNotes ? `"${selectedDetailNote.personalNotes}"` : "작성된 한줄평이 없습니다."}
+              </p>
+            </div>
+
+            {/* 📝 즉시 수정하기(Edit) 액션 버튼 소환 */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedLiquorType(selectedDetailNote.liquorType || 'wine');
+                setAnalysisResult(selectedDetailNote.analysisResult || {});
+                setPrice(selectedDetailNote.price || '');
+                setRatings(selectedDetailNote.originalRatings || selectedDetailNote.ratings || {});
+                setSelectedAromas(selectedDetailNote.selectedAromas || []);
+                setPersonalNotes(selectedDetailNote.personalNotes || '');
+                setOverallRating(selectedDetailNote.overallRating || 50);
+                setImage(selectedDetailNote.thumbnail || null);
+
+                setEditingNoteId(selectedDetailNote.id);
+                setSelectedDetailNote(null);
+                setCurrentView('add');
+                showToast("노트 수정 모드로 진입했습니다. 내용을 고친 후 다시 저장하세요!", "info");
+              }}
+              className="w-full bg-gray-900 hover:bg-black text-white font-black py-3.5 rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+            >
+              📝 이 테이스팅 노트 수정하기
+            </button>
           </div>
         </div>
       )}
