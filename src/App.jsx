@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
-const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "YOUR_FIREBASE_API_KEY_HERE";
+const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "";
 
 const fallbackConfig = {
   apiKey: FIREBASE_API_KEY,
