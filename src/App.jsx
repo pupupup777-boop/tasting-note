@@ -299,6 +299,36 @@ export default function TastingApp() {
   const [isSearching, setIsSearching] = useState(false);
 
   const fileInputRef = useRef(null);
+  // 📊 필터 및 정렬 연산 장치를 컴포넌트 최상단으로 격리 (무한 루프 에러 완치)
+  const safeNotes = useMemo(() => Array.isArray(notes) ? notes : [], [notes]);
+
+  const uniqueRegions = useMemo(() => {
+    const regions = new Set();
+    safeNotes.forEach(n => {
+      if (n?.analysisResult?.region) regions.add(n.analysisResult.region);
+    });
+    return ['all', ...Array.from(regions)];
+  }, [safeNotes]);
+
+  const processedNotes = useMemo(() => {
+    let result = [...safeNotes];
+
+    if (filterStyle && filterStyle !== 'all') {
+      result = result.filter(n => (n?.analysisResult?.wineStyle || 'red') === filterStyle);
+    }
+
+    if (filterRegion && filterRegion !== 'all') {
+      result = result.filter(n => n?.analysisResult?.region === filterRegion);
+    }
+
+    result.sort((a, b) => {
+      if (listSortKey === 'priceDesc') return (Number(b?.price || 0)) - (Number(a?.price || 0));
+      if (listSortKey === 'priceAsc') return (Number(a?.price || 0)) - (Number(b?.price || 0));
+      return (b?.createdAt || 0) - (a?.createdAt || 0);
+    });
+
+    return result;
+  }, [safeNotes, listSortKey, filterStyle, filterRegion]);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -1224,47 +1254,7 @@ export default function TastingApp() {
   );
 
   const renderListView = () => {
-    // 파이어베이스 데이터가 아직 안 들어왔거나 배열이 아닐 경우를 대비한 안전 가드
-    const safeNotes = Array.isArray(notes) ? notes : [];
-
-    // 유효한 지역(Region) 목록 안전하게 추출
-    const uniqueRegions = useMemo(() => {
-      const regions = new Set();
-      safeNotes.forEach(n => {
-        if (n?.analysisResult?.region) {
-          regions.add(n.analysisResult.region);
-        }
-      });
-      return ['all', ...Array.from(regions)];
-    }, [safeNotes]);
-
-    // 📊 정렬 및 필터링 연산 안전 격리
-    const processedNotes = useMemo(() => {
-      let result = [...safeNotes];
-
-      // 1. 분류별(스타일) 필터링
-      if (filterStyle && filterStyle !== 'all') {
-        result = result.filter(n => {
-          const style = n?.analysisResult?.wineStyle || 'red';
-          return style === filterStyle;
-        });
-      }
-
-      // 2. 지역별 필터링
-      if (filterRegion && filterRegion !== 'all') {
-        result = result.filter(n => n?.analysisResult?.region === filterRegion);
-      }
-
-      // 3. 정렬 휠(Select) 작동
-      result.sort((a, b) => {
-        if (listSortKey === 'priceDesc') return (Number(b?.price || 0)) - (Number(a?.price || 0));
-        if (listSortKey === 'priceAsc') return (Number(a?.price || 0)) - (Number(b?.price || 0));
-        return (b?.createdAt || 0) - (a?.createdAt || 0);
-      });
-
-      return result;
-    }, [safeNotes, listSortKey, filterStyle, filterRegion]);
-
+    
     return (
       <div className="space-y-4 animate-in fade-in">
         <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-sm space-y-3.5">
