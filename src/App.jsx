@@ -491,6 +491,13 @@ export default function TastingApp() {
 
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
+    
+    // API 키가 제대로 로드되었는지 사전 검증 (가장 흔한 실패 원인 차단)
+    if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === "") {
+      showToast("로컬 환경 변수(API 키)를 불러오지 못했습니다. .env.local 설정을 확인하세요.", "error");
+      return;
+    }
+
     setIsSearching(true);
     setSearchResult(null);
 
@@ -528,7 +535,8 @@ export default function TastingApp() {
                 "avgPrice": { type: "STRING", description: "네이버 카페 와쌉 유저 언급 및 데일리샷 기준의 대략적인 평균 가격대 범위 (데이터가 없거나 못 찾으면 반드시 '정보없음'으로 출력)" },
                 "bargainInfo": { type: "STRING", description: "와쌉 성지 매장 행사 혹은 데일리샷 특가 기준의 대략적인 특가 범위 정보 (전혀 알 수 없다면 '정보없음'으로 출력)" }
               },
-              required: ["name", "summary", "taining", "avgPrice", "bargainInfo"]
+              // 🛠️ 오타 수정 완료: "taining" -> "tasting"으로 매칭 구조 일치시킴
+              required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
             }
           }
         };
@@ -557,7 +565,7 @@ export default function TastingApp() {
         }
       } catch (err) {
         if (i === maxRetries - 1) {
-          showToast("서버 과부하로 검색이 지연되고 있습니다. 잠시 후 다시 시도해 주세요.", "error");
+          showToast("서버 통신 실패: API 키 혹은 스키마 구조를 확인해 주세요.", "error");
           console.error(err);
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
