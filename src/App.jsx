@@ -251,6 +251,8 @@ export default function TastingApp() {
   const [user, setUser] = useState(null);
   const [notes, setNotes] = useState([]);
   const [listSortKey, setListSortKey] = useState('latest'); // 내 노트 정렬 필터 플래그
+  const [filterStyle, setFilterStyle] = useState('all'); // 와인 스타일 필터링
+  const [filterRegion, setFilterRegion] = useState('all'); // 와인 지역 필터링
   const [currentView, setCurrentView] = useState('community'); // default to lounge community
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
@@ -551,35 +553,20 @@ export default function TastingApp() {
           contents: [{
             role: "user",
             parts: [{
-              text: `
-              검색 대상 주류: "${searchQuery}"
-              
-              [필수 검색 지침]
-              1. 가격 및 시세 정보를 수집할 때, 최신 웹 검색 결과를 바탕으로 오직 아래 두 군데의 실거래 정보 및 가격 언급을 최우선 기준으로 삼으세요:
-                 - 네이버 카페 '와인싸게사는곳(와쌉)' 유저 구매 후기 및 성지 정보
-                 - 주류 스마트오더 플랫폼 '데일리샷' 가격
-              2. 가격 정보는 맹신할 수 있는 단일 숫자가 아닌, 유저들이 실제로 접근 가능한 '대략적인 가격 범위(예: 150,000원 ~ 175,000원)' 형태로 포맷팅해 주어야 합니다.
-              3. 만약 위 두 개의 출처(와쌉 카페, 데일리샷)에서 해당 주류에 대한 명확한 실거래 언급이나 시세 흔적을 도저히 찾을 수 없다면, 다른 허위 정보를 지어내지 말고 가격 관련 필드에 반드시 딱 단호하게 "정보없음"이라고 기입하세요.
-              
-              위 지침에 맞춰 이 술의 역사적 특징, 테이스팅 노트(향과 맛), 그리고 정제된 시세를 지정된 JSON 구조로 반환해줘.
-            ` }]
+              text: `주류 정보 검색 요청: "${searchQuery}"
+
+최신 웹 검색 정보(특히 와인싸게사는곳 카페 시세 및 데일리샷 최신 정보)를 바탕으로 아래의 JSON 형식 규칙을 엄격하게 지켜 답변해 주세요. 다른 일반 설명 텍스트는 절대 포함하지 말고 오직 원본 JSON 데이터만 출력해야 합니다:
+
+{
+  "name": "검색된 와인/주류의 정확한 한글 및 영문 명칭",
+  "summary": "역사와 핵심 특징을 요약한 1~2줄 문장",
+  "tasting": "주요 아로마 및 풍미 피니시 특징",
+  "avgPrice": "실제 접근 가능한 평균 구매가 범위 (찾을 수 없으면 '정보없음')",
+  "bargainInfo": "성지 매장 특가 혹은 플랫폼 최저가 범위 정보 (없으면 '정보없음')"
+}`
+            }]
           }],
-          tools: [{ "google_search": {} }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                "name": { type: "STRING", description: "검색된 정확한 술 한글 및 영문 명칭" },
-                "summary": { type: "STRING", description: "역사와 특징을 1~2줄로 압축한 요약" },
-                "tasting": { type: "STRING", description: "아로마, 팔레트, 피니시 주요 특징" },
-                "avgPrice": { type: "STRING", description: "네이버 카페 와쌉 유저 언급 및 데일리샷 기준의 대략적인 평균 가격대 범위 (데이터가 없거나 못 찾으면 반드시 '정보없음'으로 출력)" },
-                "bargainInfo": { type: "STRING", description: "와쌉 성지 매장 행사 혹은 데일리샷 특가 기준의 대략적인 특가 범위 정보 (전혀 알 수 없다면 '정보없음'으로 출력)" }
-              },
-              // 🛠️ 필수 필드명 오타 전면 수정 ("taining" -> "tasting")
-              required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
-            }
-          }
+          tools: [{ "google_search": {} }]
         };
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
@@ -603,7 +590,10 @@ export default function TastingApp() {
         const result = await response.json();
 
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-          setSearchResult(JSON.parse(result.candidates[0].content.parts[0].text));
+          let rawText = result.candidates[0].content.parts[0].text;
+          // 마크다운 백틱 가드 클렌징
+          rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+          setSearchResult(JSON.parse(rawText));
           break;
         } else {
           throw new Error("Empty response parts");
@@ -1035,15 +1025,22 @@ export default function TastingApp() {
 
           {analysisResult && !isAnalyzing && (
             <div className="mt-6 space-y-4">
-              <div className={`bg-gradient-to-br ${theme.gradient} text-white rounded-xl p-5 shadow-md relative overflow-hidden`}>
+              {/* 와인 세부 스타일에 맞춰 버건디 vs 골드 실버 레이아웃 동적 변환 */}
+              <div className={`bg-gradient-to-br ${isRedMode ? 'from-rose-950 via-purple-950 to-indigo-950 text-white' : 'from-amber-100 via-yellow-50 to-orange-100 text-amber-950 border border-amber-200/60'} rounded-2xl p-5 shadow-md relative overflow-hidden`}>
                 <div className="relative z-10">
                   <div className="flex justify-between items-start mb-3">
-                    <h2 className="text-lg font-bold leading-tight pr-2">{analysisResult.name}</h2>
-                    <span className="px-2 py-1 bg-white/20 rounded text-xs font-medium backdrop-blur-sm">{analysisResult.type}</span>
+                    <h2 className="text-base font-black leading-tight pr-2">{analysisResult.name}</h2>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold backdrop-blur-sm ${isRedMode ? 'bg-white/20 text-white' : 'bg-amber-800/10 text-amber-900'}`}>{analysisResult.type || 'Wine'}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-white/85">
-                    <div><span className="block text-white/50 text-xs mb-0.5">지역/국가</span><span className="font-medium text-white truncate block">{analysisResult.region || '-'}</span></div>
-                    <div><span className="block text-white/50 text-xs mb-0.5">숙성/빈티지</span><span className="font-medium text-white">{analysisResult.vintage || '-'}</span></div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                    <div>
+                      <span className={`block text-[10px] mb-0.5 font-bold ${isRedMode ? 'text-white/50' : 'text-amber-800/60'}`}>지역/국가</span>
+                      <span className="font-black truncate block">{analysisResult.region || '-'}</span>
+                    </div>
+                    <div>
+                      <span className={`block text-[10px] mb-0.5 font-bold ${isRedMode ? 'text-white/50' : 'text-amber-800/60'}`}>숙성/빈티지</span>
+                      <span className="font-mono font-black">{(analysisResult.vintage === "null" || !analysisResult.vintage) ? 'NV' : analysisResult.vintage}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1227,39 +1224,102 @@ export default function TastingApp() {
   );
 
   const renderListView = () => {
-    // 📊 다차원 정렬 필터 컴퓨팅 로직 구현
-    const sortedNotes = [...notes].sort((a, b) => {
-      if (listSortKey === 'style') {
-        return (a.analysisResult?.wineStyle || '').localeCompare(b.analysisResult?.wineStyle || '');
+    // 현재 저장된 데이터들에서 유효한 지역(Region) 목록만 동적으로 중복 없이 추출
+    const uniqueRegions = useMemo(() => {
+      const regions = new Set();
+      notes.forEach(n => {
+        if (n.analysisResult?.region) regions.add(n.analysisResult.region);
+      });
+      return ['all', ...Array.from(regions)];
+    }, [notes]);
+
+    // 📊 다차원 조건부 정렬 및 다중 필터링 연산
+    const processedNotes = useMemo(() => {
+      let result = [...notes];
+
+      // 1. 분류별(스타일) 필터링
+      if (filterStyle !== 'all') {
+        result = result.filter(n => (n.analysisResult?.wineStyle || 'red') === filterStyle);
       }
-      if (listSortKey === 'price') {
-        return (Number(b.price) || 0) - (Number(a.price) || 0); // 가격 높은 순
+
+      // 2. 지역별 필터링
+      if (filterRegion !== 'all') {
+        result = result.filter(n => n.analysisResult?.region === filterRegion);
       }
-      if (listSortKey === 'region') {
-        return (a.analysisResult?.region || '').localeCompare(b.analysisResult?.region || '');
-      }
-      return b.createdAt - a.createdAt; // 최신순 기본값
-    });
+
+      // 3. 정렬 휠(Select) 엔진 작동
+      result.sort((a, b) => {
+        if (listSortKey === 'priceDesc') return (b.price || 0) - (a.price || 0);
+        if (listSortKey === 'priceAsc') return (a.price || 0) - (b.price || 0);
+        return b.createdAt - a.createdAt; // 최신순
+      });
+
+      return result;
+    }, [notes, listSortKey, filterStyle, filterRegion]);
 
     return (
       <div className="space-y-4 animate-in fade-in">
-        <div className="flex flex-col gap-2 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm">
-          <div className="flex justify-between items-center px-1">
-            <h2 className="text-sm font-black text-gray-900">내 테이스팅 노트 ({notes.length})</h2>
-            <span className="text-[10px] font-bold text-gray-400 font-mono">SORTING ACTIVE</span>
+        <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-sm space-y-3.5">
+          {/* 상단 헤더 및 가격 정렬 선택 휠 */}
+          <div className="flex justify-between items-center">
+            <h2 className="text-xs font-black text-gray-800">내 테이스팅 노트 ({processedNotes.length}개)</h2>
+            <select 
+              value={listSortKey} 
+              onChange={(e) => setListSortKey(e.target.value)}
+              className="text-[11px] font-black bg-gray-50 border border-gray-200 rounded-lg p-1.5 outline-none text-gray-700 cursor-pointer"
+            >
+              <option value="latest">📅 최신 등록순</option>
+              <option value="priceDesc">💵 가격 높은순</option>
+              <option value="priceAsc">💵 가격 낮은순</option>
+            </select>
           </div>
 
-          {/* 다차원 정렬 내비게이션 바 */}
-          <div className="grid grid-cols-4 gap-1 bg-gray-100 p-1 rounded-xl">
-            <button type="button" onClick={() => setListSortKey('latest')} className={`py-1.5 text-[10px] font-black rounded-lg transition-all ${listSortKey === 'latest' ? 'bg-white text-gray-900 shadow-xs' : 'text-gray-400'}`}>📅 최신순</button>
-            <button type="button" onClick={() => setListSortKey('style')} className={`py-1.5 text-[10px] font-black rounded-lg transition-all ${listSortKey === 'style' ? 'bg-white text-rose-900 shadow-xs' : 'text-gray-400'}`}>🍇 분류별</button>
-            <button type="button" onClick={() => setListSortKey('price')} className={`py-1.5 text-[10px] font-black rounded-lg transition-all ${listSortKey === 'price' ? 'bg-white text-amber-700 shadow-xs' : 'text-gray-400'}`}>💵 가격순</button>
-            <button type="button" onClick={() => setListSortKey('region')} className={`py-1.5 text-[10px] font-black rounded-lg transition-all ${listSortKey === 'region' ? 'bg-white text-blue-900 shadow-xs' : 'text-gray-400'}`}>🗺️ 지역별</button>
+          <div className="border-t border-gray-100 my-1"></div>
+
+          {/* 🍇 와인 종류별 상세 필터 랙 */}
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-black text-gray-400 block pl-0.5">와인 종류 필터</span>
+            <div className="flex gap-1 overflow-x-auto hide-scrollbar">
+              {[
+                { id: 'all', name: '전체' },
+                { id: 'red', name: '🍷 레드' },
+                { id: 'white', name: '🥂 화이트' },
+                { id: 'champagne', name: '🍾 샴페인' },
+                { id: 'desert', name: '🍯 디저트' }
+              ].map(style => (
+                <button 
+                  key={style.id} type="button" 
+                  onClick={() => setFilterStyle(style.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap border transition-all ${filterStyle === style.id ? 'bg-rose-900 text-white border-rose-950 shadow-xs' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+                >
+                  {style.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 🗺️ 지역별 상세 필터 휠 매핑 구역 */}
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-black text-gray-400 block pl-0.5">생산 지역 필터</span>
+            <select
+              value={filterRegion}
+              onChange={(e) => setFilterRegion(e.target.value)}
+              className="w-full text-xs font-bold bg-gray-50 border border-gray-200 rounded-xl p-2.5 outline-none text-gray-800 cursor-pointer"
+            >
+              <option value="all">🗺️ 모든 생산 지역 (전체 보기)</option>
+              {uniqueRegions.filter(r => r !== 'all').map(region => (
+                <option key={region} value={region}>{region}</option>
+              ))}
+            </select>
           </div>
         </div>
 
-        {sortedNotes.length === 0 && <div className="text-center p-10 bg-white rounded-2xl border text-gray-400 text-xs font-medium">아직 작성한 보틀이 없습니다.</div>}
-        {sortedNotes.map(note => {
+        {processedNotes.length === 0 && (
+          <div className="text-center p-12 bg-white rounded-2xl border border-dashed text-gray-400 text-xs font-bold">
+            선택한 필터 조건에 맞는 와인 노트가 없습니다.
+          </div>
+        )}
+        {processedNotes.map(note => {
           const conf = LIQUOR_CONFIG[note.liquorType] || LIQUOR_CONFIG.wine;
           const theme = getThemeClasses(conf.theme);
           return (
