@@ -492,9 +492,8 @@ export default function TastingApp() {
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
     
-    // API 키가 제대로 로드되었는지 사전 검증 (가장 흔한 실패 원인 차단)
     if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === "") {
-      showToast("로컬 환경 변수(API 키)를 불러오지 못했습니다. .env.local 설정을 확인하세요.", "error");
+      showToast("로컬 환경 변수(API 키)를 불러오지 못했습니다. .env 설정을 확인하세요.", "error");
       return;
     }
 
@@ -535,7 +534,7 @@ export default function TastingApp() {
                 "avgPrice": { type: "STRING", description: "네이버 카페 와쌉 유저 언급 및 데일리샷 기준의 대략적인 평균 가격대 범위 (데이터가 없거나 못 찾으면 반드시 '정보없음'으로 출력)" },
                 "bargainInfo": { type: "STRING", description: "와쌉 성지 매장 행사 혹은 데일리샷 특가 기준의 대략적인 특가 범위 정보 (전혀 알 수 없다면 '정보없음'으로 출력)" }
               },
-              // 🛠️ 오타 수정 완료: "taining" -> "tasting"으로 매칭 구조 일치시킴
+              // 🛠️ 필수 필드명 오타 전면 수정 ("taining" -> "tasting")
               required: ["name", "summary", "tasting", "avgPrice", "bargainInfo"]
             }
           }
@@ -554,7 +553,11 @@ export default function TastingApp() {
           continue;
         }
 
-        if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API call failed: ${response.status} - ${errorText}`);
+        }
+        
         const result = await response.json();
 
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
@@ -565,8 +568,8 @@ export default function TastingApp() {
         }
       } catch (err) {
         if (i === maxRetries - 1) {
-          showToast("서버 통신 실패: API 키 혹은 스키마 구조를 확인해 주세요.", "error");
-          console.error(err);
+          showToast("서버 통신 실패: API 키 또는 JSON 스키마 구조를 확인해 주세요.", "error");
+          console.error("최종 검색 에러:", err);
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2;
@@ -602,6 +605,8 @@ export default function TastingApp() {
     const base64Data = base64Image.split(',')[1];
 
     const config = LIQUOR_CONFIG[selectedLiquorType];
+    
+    // 🛠️ 템플릿 리터럴 내부에 변수가 누락 없이 정상 반영되도록 프롬프트 정제
     const prompt = `주류 라벨 이미지 분석 및 실물인증코드 감지 요청.
     현재 선택한 주종 카테고리는 '${config.name}'입니다.
     
@@ -630,7 +635,7 @@ export default function TastingApp() {
             "grape": { type: "STRING", description: "포도 품종, 사용 맥아, 주조미 쌀 품종, 캐스크 정보 등" },
             "producer": { type: "STRING", description: "양조장/증류소/제조업체 명칭" },
             "detectedCategory": { type: "STRING", description: "자동 판정 카테고리 ('wine', 'whiskey', 'sake', 'beer' 중 반드시 택일)" },
-            "isCodeDetected": { type: "BOOLEAN", description: "이미지 내에서 정확한 인증코드 문자열 '${verificationCode}'가 인지/판독되었는지 여부" }
+            "isCodeDetected": { type: "BOOLEAN", description: "이미지 내에서 정확한 인증코드 문자열이 인지/판독되었는지 여부" }
           },
           required: ["name", "type", "region", "vintage", "grape", "producer", "detectedCategory", "isCodeDetected"]
         }
@@ -655,7 +660,11 @@ export default function TastingApp() {
           continue;
         }
 
-        if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`API call failed: ${response.status} - ${errorText}`);
+        }
+
         const result = await response.json();
 
         if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
@@ -683,8 +692,9 @@ export default function TastingApp() {
         }
       } catch (err) {
         if (i === maxRetries - 1) {
-          setError("구글 서버 과부하로 인해 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요.");
-          showToast("라벨 분석 실패: 서버 과부하", "error");
+          setError("구글 서버 통신 오류로 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요.");
+          showToast("라벨 분석 실패", "error");
+          console.error("최종 분석 에러:", err);
           setIsAnalyzing(false);
         } else {
           await new Promise(resolve => setTimeout(resolve, delay));
@@ -693,7 +703,6 @@ export default function TastingApp() {
       }
     }
   };
-
   const handleSaveNote = async () => {
     if (!analysisResult) {
       showToast("라벨 분석이 아직 완료되지 않았습니다.", "error");
