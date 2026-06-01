@@ -1224,38 +1224,46 @@ export default function TastingApp() {
   );
 
   const renderListView = () => {
-    // 현재 저장된 데이터들에서 유효한 지역(Region) 목록만 동적으로 중복 없이 추출
+    // 파이어베이스 데이터가 아직 안 들어왔거나 배열이 아닐 경우를 대비한 안전 가드
+    const safeNotes = Array.isArray(notes) ? notes : [];
+
+    // 유효한 지역(Region) 목록 안전하게 추출
     const uniqueRegions = useMemo(() => {
       const regions = new Set();
-      notes.forEach(n => {
-        if (n.analysisResult?.region) regions.add(n.analysisResult.region);
+      safeNotes.forEach(n => {
+        if (n?.analysisResult?.region) {
+          regions.add(n.analysisResult.region);
+        }
       });
       return ['all', ...Array.from(regions)];
-    }, [notes]);
+    }, [safeNotes]);
 
-    // 📊 다차원 조건부 정렬 및 다중 필터링 연산
+    // 📊 정렬 및 필터링 연산 안전 격리
     const processedNotes = useMemo(() => {
-      let result = [...notes];
+      let result = [...safeNotes];
 
       // 1. 분류별(스타일) 필터링
-      if (filterStyle !== 'all') {
-        result = result.filter(n => (n.analysisResult?.wineStyle || 'red') === filterStyle);
+      if (filterStyle && filterStyle !== 'all') {
+        result = result.filter(n => {
+          const style = n?.analysisResult?.wineStyle || 'red';
+          return style === filterStyle;
+        });
       }
 
       // 2. 지역별 필터링
-      if (filterRegion !== 'all') {
-        result = result.filter(n => n.analysisResult?.region === filterRegion);
+      if (filterRegion && filterRegion !== 'all') {
+        result = result.filter(n => n?.analysisResult?.region === filterRegion);
       }
 
-      // 3. 정렬 휠(Select) 엔진 작동
+      // 3. 정렬 휠(Select) 작동
       result.sort((a, b) => {
-        if (listSortKey === 'priceDesc') return (b.price || 0) - (a.price || 0);
-        if (listSortKey === 'priceAsc') return (a.price || 0) - (b.price || 0);
-        return b.createdAt - a.createdAt; // 최신순
+        if (listSortKey === 'priceDesc') return (Number(b?.price || 0)) - (Number(a?.price || 0));
+        if (listSortKey === 'priceAsc') return (Number(a?.price || 0)) - (Number(b?.price || 0));
+        return (b?.createdAt || 0) - (a?.createdAt || 0);
       });
 
       return result;
-    }, [notes, listSortKey, filterStyle, filterRegion]);
+    }, [safeNotes, listSortKey, filterStyle, filterRegion]);
 
     return (
       <div className="space-y-4 animate-in fade-in">
