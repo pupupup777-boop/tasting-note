@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 
 const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "";
@@ -355,7 +355,20 @@ export default function TastingApp() {
 
   useEffect(() => {
     const initAuth = async () => {
+      // 1) 먼저 구글 리다이렉트 복귀 결과부터 확인 (홈화면 앱/모바일 로그인 처리)
       try {
+        const redirectResult = await getRedirectResult(auth);
+        if (redirectResult && redirectResult.user) {
+          await finalizeGoogleLogin(redirectResult.user);
+          return; // 구글 로그인 완료 → 익명 로그인은 시도하지 않음
+        }
+      } catch (e) {
+        console.error("getRedirectResult error:", e);
+      }
+
+      // 2) 리다이렉트 결과도 없고 이미 로그인된 유저도 없을 때만 익명 로그인
+      try {
+        if (auth.currentUser) return;
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
           await signInWithCustomToken(auth, __initial_auth_token);
         } else {
@@ -497,36 +510,62 @@ export default function TastingApp() {
 
   const [showLoginModal, setShowLoginModal] = useState(false);
 
+  // ✅ [모바일 로그인 수정] 홈화면 추가(standalone) / 모바일 환경 감지기
+  // 이런 환경에서는 팝업(signInWithPopup)이 storage 분리 때문에 깨지므로 리다이렉트를 써야 한다.
+  const shouldUseRedirect = () => {
+    if (typeof window === 'undefined') return false;
+    const isStandalone =
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      window.navigator.standalone === true; // iOS 홈화면 추가 앱
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(window.navigator.userAgent);
+    return isStandalone || isMobile;
+  };
+
+  // ✅ 로그인 성공 후 프로필을 만들고 상태를 세팅하는 공통 처리 (팝업/리다이렉트 양쪽에서 재사용)
+  const finalizeGoogleLogin = async (loggedInUser) => {
+    const profileRef = doc(db, 'artifacts', appId, 'users', loggedInUser.uid, 'profile', 'info');
+    const { getDoc } = await import('firebase/firestore');
+    const profileSnap = await getDoc(profileRef);
+
+    let finalNickname = loggedInUser.displayName || 'Google유저_' + Math.floor(1000 + Math.random() * 9000);
+
+    if (profileSnap.exists() && profileSnap.data().nickname) {
+      finalNickname = profileSnap.data().nickname;
+    } else {
+      await setDoc(profileRef, {
+        nickname: finalNickname,
+        createdAt: Date.now(),
+        provider: 'google'
+      }, { merge: true });
+    }
+
+    setUserProfile(p => ({ ...p, nickname: finalNickname }));
+    setUser(loggedInUser);
+    setShowLoginModal(false);
+    showToast(`반갑습니다, ${finalNickname}님! 로그인 성공!`, "success");
+  };
+
   const handleGoogleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+
+    // 홈화면 앱/모바일이면 리다이렉트 방식 (팝업이 안 되는 환경)
+    if (shouldUseRedirect()) {
+      try {
+        showToast("구글 로그인 페이지로 이동합니다...", "info");
+        await signInWithRedirect(auth, provider);
+        // 여기서 페이지가 구글로 떠나고, 돌아오면 위 initAuth의 getRedirectResult가 처리한다.
+      } catch (error) {
+        console.error("Redirect login error:", error);
+        showToast("구글 인증에 실패했거나 취소되었습니다.", "error");
+      }
+      return;
+    }
+
+    // PC 등 일반 환경: 기존 팝업 방식
     try {
       showToast("구글 로그인을 시도합니다...", "info");
-
-      const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
-      const loggedInUser = result.user;
-
-      const profileRef = doc(db, 'artifacts', appId, 'users', loggedInUser.uid, 'profile', 'info');
-      const { getDoc } = await import('firebase/firestore');
-      const profileSnap = await getDoc(profileRef);
-
-      let finalNickname = loggedInUser.displayName || 'Google유저_' + Math.floor(1000 + Math.random() * 9000);
-
-      if (profileSnap.exists() && profileSnap.data().nickname) {
-        finalNickname = profileSnap.data().nickname;
-      } else {
-        await setDoc(profileRef, {
-          nickname: finalNickname,
-          createdAt: Date.now(),
-          provider: 'google'
-        }, { merge: true });
-      }
-
-      setUserProfile(p => ({ ...p, nickname: finalNickname }));
-      setUser(loggedInUser);
-
-      setShowLoginModal(false);
-      showToast(`반갑습니다, ${finalNickname}님! 로그인 성공!`, "success");
-
+      await finalizeGoogleLogin(result.user);
     } catch (error) {
       console.error("Login error:", error);
       showToast("구글 인증에 실패했거나 취소되었습니다.", "error");
