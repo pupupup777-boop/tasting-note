@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
@@ -237,6 +237,192 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
         })}
       </div>
       <span className="text-sm font-black text-amber-500 font-mono shrink-0 bg-amber-50/50 px-2 py-0.5 rounded border border-amber-100">{displayValue.toFixed(1)}</span>
+    </div>
+  );
+};
+
+// 🍷 주종/스타일별 잔 모양 정의 (viewBox 0 0 200 250 기준)
+const GLASS_CONFIG = {
+  red: { color: '#6B1F38', rimL: 72, rimR: 128,
+    wall: 'M72 26 Q60 60 66 88 Q74 112 100 116 Q126 112 134 88 Q140 60 128 26',
+    fillPath: 'M72 26 Q60 60 66 88 Q74 112 100 116 Q126 112 134 88 Q140 60 128 26 Z',
+    top: 30, bottom: 116, stem: [100, 116, 100, 198], foot: 'M70 200 Q100 190 130 200' },
+  white: { color: '#E9CE74', rimL: 78, rimR: 122,
+    wall: 'M78 22 Q76 80 84 106 Q88 122 100 126 Q112 122 116 106 Q124 80 122 22',
+    fillPath: 'M78 22 Q76 80 84 106 Q88 122 100 126 Q112 122 116 106 Q124 80 122 22 Z',
+    top: 22, bottom: 126, stem: [100, 126, 100, 202], foot: 'M76 204 Q100 195 124 204' },
+  champagne: { color: '#EBD27A', bubbles: true, rimL: 88, rimR: 112,
+    wall: 'M88 14 Q87 72 92 118 Q95 140 100 148 Q105 140 108 118 Q113 72 112 14',
+    fillPath: 'M88 14 Q87 72 92 118 Q95 140 100 148 Q105 140 108 118 Q113 72 112 14 Z',
+    top: 14, bottom: 148, stem: [100, 148, 100, 206], foot: 'M82 208 Q100 199 118 208' },
+  desert: { color: '#D98E2B', rimL: 82, rimR: 118,
+    wall: 'M82 52 Q82 96 93 112 Q96 118 100 118 Q104 118 107 112 Q118 96 118 52',
+    fillPath: 'M82 52 Q82 96 93 112 Q96 118 100 118 Q104 118 107 112 Q118 96 118 52 Z',
+    top: 52, bottom: 118, stem: [100, 118, 100, 198], foot: 'M84 200 Q100 192 116 200' },
+  whiskey: { color: '#B5651D', tumbler: true, ice: true, rimL: 68, rimR: 132,
+    wall: 'M68 96 Q66 152 70 170 Q72 180 100 180 Q128 180 130 170 Q134 152 132 96',
+    fillPath: 'M68 96 Q66 152 70 170 Q72 180 100 180 Q128 180 130 170 Q134 152 132 96 Z',
+    top: 96, bottom: 180 },
+  sake: { color: '#EAE3C8', sakecup: true, rimL: 74, rimR: 126,
+    wall: 'M74 110 Q74 150 80 162 Q84 170 100 170 Q116 170 120 162 Q126 150 126 110',
+    fillPath: 'M74 110 Q74 150 80 162 Q84 170 100 170 Q116 170 120 162 Q126 150 126 110 Z',
+    top: 110, bottom: 170 },
+  beer: { color: '#D98F1A', mug: true, foam: true, rimL: 72, rimR: 128,
+    wall: 'M72 70 L72 188 Q72 196 80 196 L120 196 Q128 196 128 188 L128 70',
+    fillPath: 'M72 70 L72 188 Q72 196 80 196 L120 196 Q128 196 128 188 L128 70 Z',
+    top: 70, bottom: 196 }
+};
+
+// 🍷 종합 만족도: 점수에 따라 잔에 술이 차오르는 시각화 + 슬라이더
+const WineGlassRating = ({ score, onChange, glassType }) => {
+  const g = GLASS_CONFIG[glassType] || GLASS_CONFIG.red;
+  const v = score || 50;
+  const [sloshing, setSloshing] = useState(false);
+  const settleRef = useRef(null);
+  const rawId = useId();
+  const clipId = 'glassclip-' + rawId.replace(/[^a-zA-Z0-9]/g, '');
+  const STROKE = '#475569';
+
+  const fullH = g.bottom - g.top;
+  const fillRatio = g.foam ? (v / 100) * 0.82 : v / 100;
+  const h = Math.round(fullH * fillRatio);
+  const topY = g.bottom - h;
+
+  useEffect(() => () => clearTimeout(settleRef.current), []);
+
+  const handleChange = (e) => {
+    onChange(Number(e.target.value));
+    setSloshing(true);
+    clearTimeout(settleRef.current);
+    settleRef.current = setTimeout(() => setSloshing(false), 700);
+  };
+
+  // 샴페인 기포
+  const champagneBubbles = [];
+  if (g.bubbles && v >= 6) {
+    const cols = [97, 100, 103, 98, 102];
+    for (let i = 0; i < 5; i++) {
+      const sy = g.bottom - 4 - (i * ((g.bottom - topY) / 6));
+      if (sy < topY) continue;
+      const dur = 2.2 + i * 0.35;
+      champagneBubbles.push(
+        <circle key={'cb' + i} cx={cols[i]} cy={sy} r={i % 2 ? 1 : 1.4} fill="#fff8e0" opacity="0.85">
+          <animate attributeName="cy" from={sy} to={topY + 3} dur={dur + 's'} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0;0.85;0" dur={dur + 's'} repeatCount="indefinite" />
+        </circle>
+      );
+    }
+  }
+
+  // 맥주 거품 + 탄산
+  let foamGroup = null;
+  if (g.foam) {
+    const foamH = Math.round(fullH * (v / 100) * 0.18) + 8;
+    const surfY = topY - foamH;
+    const blobDefs = [[80, 5, 0], [90, 6, 0.6], [100, 5.5, 1.2], [110, 6, 0.4], [120, 5, 1.5], [85, 4, 0.9], [105, 4.5, 0.3], [115, 4, 1.1]];
+    const carbon = [];
+    const ccols = [84, 96, 108, 90, 102];
+    for (let j = 0; j < 5; j++) {
+      const sy2 = g.bottom - 6 - j * 8;
+      if (sy2 < topY) continue;
+      const dur = 2.0 + j * 0.3;
+      carbon.push(
+        <circle key={'car' + j} cx={ccols[j]} cy={sy2} r={1.2} fill="#fff6cf" opacity="0.85">
+          <animate attributeName="cy" from={sy2} to={topY + 2} dur={dur + 's'} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0;0.85;0" dur={dur + 's'} repeatCount="indefinite" />
+        </circle>
+      );
+    }
+    foamGroup = (
+      <g clipPath={`url(#${clipId})`}>
+        {carbon}
+        <rect x="40" width="120" y={surfY} height={foamH + 2} fill="#FBF4DE" />
+        {blobDefs.map((b, i) => (
+          <circle key={'fb' + i} cx={b[0]} cy={surfY} r={b[1]} fill="#FFFDF5">
+            <animate attributeName="cy" values={`${surfY};${surfY - 3};${surfY + 1.5};${surfY}`} dur={(2.6 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
+            <animate attributeName="r" values={`${b[1]};${b[1] + 1.2};${b[1] - 0.6};${b[1]}`} dur={(3.1 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
+          </circle>
+        ))}
+      </g>
+    );
+  }
+
+  // 위스키 얼음 (수면 위에 떠서 슬라이드 시 출렁, 멈추면 정착)
+  const renderIce = (cx, cy, s, rot, key) => (
+    <g key={key}>
+      <rect x={cx - s / 2} y={cy - s / 2} width={s} height={s} rx="3"
+        fill="#ffffff" opacity="0.34" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1"
+        transform={`rotate(${rot} ${cx} ${cy})`} />
+      {sloshing && (
+        <animateTransform attributeName="transform" type="translate"
+          values="0 0; 0 -2.5; 0 1.2; 0 -0.6; 0 0" dur="0.9s" repeatCount="indefinite" />
+      )}
+    </g>
+  );
+  let iceGroup = null;
+  if (g.ice && h > 14) {
+    const surfaceY = topY + 6;
+    const ices = [renderIce(88, surfaceY, 18, 16, 'ice1')];
+    if (h > 30) ices.push(renderIce(110, surfaceY + 4, 15, -13, 'ice2'));
+    iceGroup = <g clipPath={`url(#${clipId})`}>{ices}</g>;
+  }
+
+  return (
+    <div>
+      <div className="flex justify-center items-end mb-3" style={{ height: 250 }}>
+        <svg width="200" height="250" viewBox="0 0 200 250" role="img" aria-label="만족도 잔">
+          <defs>
+            <clipPath id={clipId}><path d={g.fillPath} /></clipPath>
+          </defs>
+
+          {/* 채워지는 술 */}
+          <rect x="40" width="120" y={topY} height={h} clipPath={`url(#${clipId})`} fill={g.color} />
+
+          {champagneBubbles.length > 0 && <g clipPath={`url(#${clipId})`}>{champagneBubbles}</g>}
+          {foamGroup}
+          {iceGroup}
+
+          {/* 유리 광택 */}
+          <rect x="40" width="20" y={g.top} height={g.bottom - g.top} clipPath={`url(#${clipId})`} fill="#ffffff" opacity="0.12" />
+
+          {/* 잔 벽 */}
+          <path d={g.wall} fill="none" stroke={STROKE} strokeWidth="2.4" strokeLinecap="round" />
+
+          {/* 입구 테두리 (머그 제외) */}
+          {!g.mug && <line x1={g.rimL} y1={g.top} x2={g.rimR} y2={g.top} stroke={STROKE} strokeWidth="2.4" strokeLinecap="round" />}
+
+          {/* 다리 / 받침 */}
+          {g.stem && <line x1={g.stem[0]} y1={g.stem[1]} x2={g.stem[2]} y2={g.stem[3]} stroke={STROKE} strokeWidth="2.4" />}
+          {g.foot && <path d={g.foot} fill="none" stroke={STROKE} strokeWidth="2.4" strokeLinecap="round" />}
+
+          {/* 텀블러 / 머그 바닥 */}
+          {(g.tumbler || g.mug) && <line x1="72" y1={g.bottom} x2="128" y2={g.bottom} stroke={STROKE} strokeWidth="2.4" />}
+
+          {/* 머그: 윗변 + 손잡이 */}
+          {g.mug && <>
+            <line x1="72" y1="70" x2="128" y2="70" stroke={STROKE} strokeWidth="2.4" strokeLinecap="round" />
+            <path d="M128 96 Q150 100 150 130 Q150 160 128 164" fill="none" stroke={STROKE} strokeWidth="2.4" />
+          </>}
+
+          {/* 사케잔 바닥 */}
+          {g.sakecup && <line x1="80" y1="170" x2="120" y2="170" stroke={STROKE} strokeWidth="2.4" />}
+        </svg>
+      </div>
+
+      <input
+        type="range"
+        min="1"
+        max="100"
+        value={v}
+        onChange={handleChange}
+        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-800"
+      />
+      <div className="flex justify-between text-[10px] text-gray-400 font-bold px-1 mt-1.5 font-mono">
+        <span>1점 (부족함)</span>
+        <span>50점 (중간)</span>
+        <span>90점 (훌륭함)</span>
+        <span>100점 (완벽함)</span>
+      </div>
     </div>
   );
 };
@@ -1002,7 +1188,6 @@ export default function TastingApp() {
     const config = LIQUOR_CONFIG[selectedLiquorType];
     const theme = getThemeClasses(config.theme);
     const isRedMode = !analysisResult?.wineStyle || analysisResult?.wineStyle === 'red';
-    const wineColorClass = isRedMode ? 'from-rose-800 to-red-950' : 'from-amber-200 via-yellow-300 to-amber-400';
     const wineBgClass = isRedMode ? 'bg-rose-900/10' : 'bg-amber-500/10';
     const wineBorderClass = isRedMode ? 'border-rose-200' : 'border-amber-200';
     const wineTextClass = isRedMode ? 'text-rose-900' : 'text-amber-800';
@@ -1183,31 +1368,12 @@ export default function TastingApp() {
                 </span>
               </div>
 
-              {/* 와인 잔에 와인이 따라지는 시각 효과 컴포넌트 */}
-              <div className="h-14 bg-white border border-gray-200 rounded-2xl relative overflow-hidden mb-4 shadow-sm flex items-center justify-center">
-                <div
-                  className={`absolute left-0 bottom-0 top-0 bg-gradient-to-r ${wineColorClass} transition-all duration-500 ease-out`}
-                  style={{ width: `${overallRating || 1}%` }}
-                />
-                <span className="relative z-10 text-xs font-black tracking-widest text-slate-800 bg-white/80 px-3 py-1 rounded-full shadow-sm font-mono">
-                  FILL LEVEL: {overallRating || 50}%
-                </span>
-              </div>
-
-              <input
-                type="range"
-                min="1"
-                max="100"
-                value={overallRating || 50}
-                onChange={(e) => setOverallRating(Number(e.target.value))}
-                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-800"
+              {/* 🍷 주종/스타일에 맞는 잔에 술이 차오르는 만족도 시각화 */}
+              <WineGlassRating
+                score={overallRating}
+                onChange={setOverallRating}
+                glassType={selectedLiquorType === 'wine' ? (analysisResult?.wineStyle || 'red') : selectedLiquorType}
               />
-              <div className="flex justify-between text-[10px] text-gray-400 font-bold px-1 mt-1.5 font-mono">
-                <span>1점 (부족함)</span>
-                <span>50점 (중간)</span>
-                <span>90점 (훌륭함)</span>
-                <span>100점 (완벽함)</span>
-              </div>
             </div>
 
             <textarea
