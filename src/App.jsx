@@ -243,34 +243,27 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
 
 // 🍷 주종/스타일별 잔 모양 정의 (viewBox 0 0 200 250 기준)
 const GLASS_CONFIG = {
-  red: { color: '#6B1F38', rimL: 72, rimR: 128,
-    wall: 'M72 26 Q60 60 66 88 Q74 112 100 116 Q126 112 134 88 Q140 60 128 26',
-    fillPath: 'M72 26 Q60 60 66 88 Q74 112 100 116 Q126 112 134 88 Q140 60 128 26 Z',
-    top: 30, bottom: 116, stem: [100, 116, 100, 198], foot: 'M70 200 Q100 190 130 200' },
-  white: { color: '#E9CE74', rimL: 78, rimR: 122,
-    wall: 'M78 22 Q76 80 84 106 Q88 122 100 126 Q112 122 116 106 Q124 80 122 22',
-    fillPath: 'M78 22 Q76 80 84 106 Q88 122 100 126 Q112 122 116 106 Q124 80 122 22 Z',
-    top: 22, bottom: 126, stem: [100, 126, 100, 202], foot: 'M76 204 Q100 195 124 204' },
-  champagne: { color: '#EBD27A', bubbles: true, rimL: 88, rimR: 112,
-    wall: 'M88 14 Q87 72 92 118 Q95 140 100 148 Q105 140 108 118 Q113 72 112 14',
-    fillPath: 'M88 14 Q87 72 92 118 Q95 140 100 148 Q105 140 108 118 Q113 72 112 14 Z',
-    top: 14, bottom: 148, stem: [100, 148, 100, 206], foot: 'M82 208 Q100 199 118 208' },
-  desert: { color: '#D98E2B', rimL: 82, rimR: 118,
-    wall: 'M82 52 Q82 96 93 112 Q96 118 100 118 Q104 118 107 112 Q118 96 118 52',
-    fillPath: 'M82 52 Q82 96 93 112 Q96 118 100 118 Q104 118 107 112 Q118 96 118 52 Z',
-    top: 52, bottom: 118, stem: [100, 118, 100, 198], foot: 'M84 200 Q100 192 116 200' },
-  whiskey: { color: '#B5651D', tumbler: true, ice: true, rimL: 68, rimR: 132,
-    wall: 'M68 96 Q66 152 70 170 Q72 180 100 180 Q128 180 130 170 Q134 152 132 96',
-    fillPath: 'M68 96 Q66 152 70 170 Q72 180 100 180 Q128 180 130 170 Q134 152 132 96 Z',
-    top: 96, bottom: 180 },
-  sake: { color: '#EAE3C8', sakecup: true, rimL: 74, rimR: 126,
-    wall: 'M74 110 Q74 150 80 162 Q84 170 100 170 Q116 170 120 162 Q126 150 126 110',
-    fillPath: 'M74 110 Q74 150 80 162 Q84 170 100 170 Q116 170 120 162 Q126 150 126 110 Z',
-    top: 110, bottom: 170 },
-  beer: { color: '#D98F1A', mug: true, foam: true, rimL: 72, rimR: 128,
-    wall: 'M72 70 L72 188 Q72 196 80 196 L120 196 Q128 196 128 188 L128 70',
-    fillPath: 'M72 70 L72 188 Q72 196 80 196 L120 196 Q128 196 128 188 L128 70 Z',
-    top: 70, bottom: 196 }
+  red: { color: '#6B1F38',
+    outline: 'M 75 40 C 40 40, 25 120, 100 160 C 175 120, 160 40, 125 40 M 100 160 L 100 230 M 65 230 L 135 230',
+    fillPath: 'M 75 40 C 40 40, 25 120, 100 160 C 175 120, 160 40, 125 40 Z', top: 40, bottom: 160 },
+  white: { color: '#E9CE74',
+    outline: 'M 65 40 C 65 80, 50 140, 100 150 C 150 140, 135 80, 135 40 M 100 150 L 100 230 M 70 230 L 130 230',
+    fillPath: 'M 65 40 C 65 80, 50 140, 100 150 C 150 140, 135 80, 135 40 Z', top: 40, bottom: 150 },
+  champagne: { color: '#EBD27A', bubbles: true,
+    outline: 'M 75 30 L 75 90 C 75 150, 85 160, 100 160 C 115 160, 125 150, 125 90 L 125 30 M 100 160 L 100 230 M 70 230 L 130 230',
+    fillPath: 'M 75 30 L 75 90 C 75 150, 85 160, 100 160 C 115 160, 125 150, 125 90 L 125 30 Z', top: 30, bottom: 160 },
+  desert: { color: '#D98E2B',
+    outline: 'M 70 80 C 70 100, 55 130, 100 140 C 145 130, 130 100, 130 80 M 100 140 L 100 230 M 70 230 L 130 230',
+    fillPath: 'M 70 80 C 70 100, 55 130, 100 140 C 145 130, 130 100, 130 80 Z', top: 80, bottom: 140 },
+  whiskey: { color: '#B5651D', ice: true,
+    outline: 'M 60 80 L 70 230 L 130 230 L 140 80 M 68 215 L 132 215',
+    fillPath: 'M 60 80 L 68 215 L 132 215 L 140 80 Z', top: 80, bottom: 215 },
+  sake: { color: '#EAE3C8',
+    outline: 'M 60 140 C 60 180, 80 210, 100 210 C 120 210, 140 180, 140 140 M 85 210 L 80 230 L 120 230 L 115 210',
+    fillPath: 'M 60 140 C 60 180, 80 210, 100 210 C 120 210, 140 180, 140 140 Z', top: 140, bottom: 210 },
+  beer: { color: '#D98F1A', foam: true,
+    outline: 'M 55 50 L 55 230 L 125 230 L 125 50 M 55 210 L 125 210 M 125 80 C 165 80, 165 180, 125 180 M 125 100 C 145 100, 145 160, 125 160',
+    fillPath: 'M 55 50 L 55 210 L 125 210 L 125 50 Z', top: 50, bottom: 210 }
 };
 
 // 🍷 종합 만족도: 점수에 따라 잔에 술이 차오르는 시각화 + 슬라이더
@@ -281,7 +274,7 @@ const WineGlassRating = ({ score, onChange, glassType }) => {
   const settleRef = useRef(null);
   const rawId = useId();
   const clipId = 'glassclip-' + rawId.replace(/[^a-zA-Z0-9]/g, '');
-  const STROKE = '#475569';
+  const STROKE = '#2d3748';
 
   const fullH = g.bottom - g.top;
   const fillRatio = g.foam ? (v / 100) * 0.82 : v / 100;
@@ -319,9 +312,9 @@ const WineGlassRating = ({ score, onChange, glassType }) => {
   if (g.foam) {
     const foamH = Math.round(fullH * (v / 100) * 0.18) + 8;
     const surfY = topY - foamH;
-    const blobDefs = [[80, 5, 0], [90, 6, 0.6], [100, 5.5, 1.2], [110, 6, 0.4], [120, 5, 1.5], [85, 4, 0.9], [105, 4.5, 0.3], [115, 4, 1.1]];
+    const blobDefs = [[70, 5, 0], [82, 6, 0.6], [94, 5.5, 1.2], [106, 6, 0.4], [118, 5, 1.5], [76, 4, 0.9], [100, 4.5, 0.3], [112, 4, 1.1]];
     const carbon = [];
-    const ccols = [84, 96, 108, 90, 102];
+    const ccols = [74, 90, 106, 82, 98];
     for (let j = 0; j < 5; j++) {
       const sy2 = g.bottom - 6 - j * 8;
       if (sy2 < topY) continue;
@@ -336,7 +329,7 @@ const WineGlassRating = ({ score, onChange, glassType }) => {
     foamGroup = (
       <g clipPath={`url(#${clipId})`}>
         {carbon}
-        <rect x="40" width="120" y={surfY} height={foamH + 2} fill="#FBF4DE" />
+        <rect x="20" width="160" y={surfY} height={foamH + 2} fill="#FBF4DE" />
         {blobDefs.map((b, i) => (
           <circle key={'fb' + i} cx={b[0]} cy={surfY} r={b[1]} fill="#FFFDF5">
             <animate attributeName="cy" values={`${surfY};${surfY - 3};${surfY + 1.5};${surfY}`} dur={(2.6 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
@@ -361,9 +354,9 @@ const WineGlassRating = ({ score, onChange, glassType }) => {
   );
   let iceGroup = null;
   if (g.ice && h > 14) {
-    const surfaceY = topY + 6;
-    const ices = [renderIce(88, surfaceY, 18, 16, 'ice1')];
-    if (h > 30) ices.push(renderIce(110, surfaceY + 4, 15, -13, 'ice2'));
+    const surfaceY = topY + 8;
+    const ices = [renderIce(85, surfaceY, 20, 16, 'ice1')];
+    if (h > 30) ices.push(renderIce(112, surfaceY + 5, 17, -13, 'ice2'));
     iceGroup = <g clipPath={`url(#${clipId})`}>{ices}</g>;
   }
 
@@ -376,36 +369,17 @@ const WineGlassRating = ({ score, onChange, glassType }) => {
           </defs>
 
           {/* 채워지는 술 */}
-          <rect x="40" width="120" y={topY} height={h} clipPath={`url(#${clipId})`} fill={g.color} />
+          <rect x="20" width="160" y={topY} height={h} clipPath={`url(#${clipId})`} fill={g.color} />
 
           {champagneBubbles.length > 0 && <g clipPath={`url(#${clipId})`}>{champagneBubbles}</g>}
           {foamGroup}
           {iceGroup}
 
           {/* 유리 광택 */}
-          <rect x="40" width="20" y={g.top} height={g.bottom - g.top} clipPath={`url(#${clipId})`} fill="#ffffff" opacity="0.12" />
+          <rect x="20" width="22" y={g.top} height={g.bottom - g.top} clipPath={`url(#${clipId})`} fill="#ffffff" opacity="0.14" />
 
-          {/* 잔 벽 */}
-          <path d={g.wall} fill="none" stroke={STROKE} strokeWidth="2.4" strokeLinecap="round" />
-
-          {/* 입구 테두리 (머그 제외) */}
-          {!g.mug && <line x1={g.rimL} y1={g.top} x2={g.rimR} y2={g.top} stroke={STROKE} strokeWidth="2.4" strokeLinecap="round" />}
-
-          {/* 다리 / 받침 */}
-          {g.stem && <line x1={g.stem[0]} y1={g.stem[1]} x2={g.stem[2]} y2={g.stem[3]} stroke={STROKE} strokeWidth="2.4" />}
-          {g.foot && <path d={g.foot} fill="none" stroke={STROKE} strokeWidth="2.4" strokeLinecap="round" />}
-
-          {/* 텀블러 / 머그 바닥 */}
-          {(g.tumbler || g.mug) && <line x1="72" y1={g.bottom} x2="128" y2={g.bottom} stroke={STROKE} strokeWidth="2.4" />}
-
-          {/* 머그: 윗변 + 손잡이 */}
-          {g.mug && <>
-            <line x1="72" y1="70" x2="128" y2="70" stroke={STROKE} strokeWidth="2.4" strokeLinecap="round" />
-            <path d="M128 96 Q150 100 150 130 Q150 160 128 164" fill="none" stroke={STROKE} strokeWidth="2.4" />
-          </>}
-
-          {/* 사케잔 바닥 */}
-          {g.sakecup && <line x1="80" y1="170" x2="120" y2="170" stroke={STROKE} strokeWidth="2.4" />}
+          {/* 잔 외곽선 (제미나이 라인아트) */}
+          <path d={g.outline} fill="none" stroke={STROKE} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
 
