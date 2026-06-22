@@ -24,16 +24,8 @@ const db = getFirestore(app);
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'wine-tasting-app';
 const appId = rawAppId.replace(/\//g, '_');
 
-// VITE env standard binding with dynamic fallback
-const GEMINI_API_KEY = (() => {
-  try {
-    return import.meta.env.VITE_GEMINI_API_KEY || "";
-  } catch (e) {
-    return "";
-  }
-})();
-
-const isApiKeyMissing = !GEMINI_API_KEY || GEMINI_API_KEY.trim() === "";
+// ⚠️ [레벨2] Gemini API 키는 더 이상 브라우저에 두지 않는다.
+// 키는 서버(api/search.js, api/analyze.js)의 환경변수(GEMINI_API_KEY)에서만 사용된다.
 
 const LIQUOR_CONFIG = {
   wine: {
@@ -649,79 +641,41 @@ export default function TastingApp() {
   const handleSearchLiquor = async () => {
     if (!searchQuery.trim()) return;
 
-    if (!GEMINI_API_KEY || GEMINI_API_KEY.trim() === "") {
-      showToast("로컬 환경 변수(API 키)를 불러오지 못했습니다. .env 설정을 확인하세요.", "error");
+    // ✅ [레벨2 - 로그인 게이트] 구글 로그인한 회원만 AI 검색 사용 가능
+    if (!user || user.isAnonymous) {
+      showToast("AI 검색은 구글 로그인 후 이용할 수 있어요!", "error");
       return;
     }
 
     setIsSearching(true);
     setSearchResult(null);
 
-    const maxRetries = 3;
-    let delay = 1500;
+    try {
+      // 키를 들고 구글을 부르는 건 서버(/api/search)가 한다. 브라우저는 검색어만 보낸다.
+      const response = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery })
+      });
 
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const payload = {
-          contents: [{
-            role: "user",
-            parts: [{
-              text: `주류 정보 검색 요청: "${searchQuery}"
-
-최신 웹 검색 정보(특히 와인싸게사는곳 카페 시세 및 데일리샷 최신 정보)를 바탕으로 아래의 JSON 형식 규칙을 엄격하게 지켜 답변해 주세요. 다른 일반 설명 텍스트는 절대 포함하지 말고 오직 원본 JSON 데이터만 출력해야 합니다:
-
-{
-  "name": "검색된 와인/주류의 정확한 한글 및 영문 명칭",
-  "summary": "역사와 핵심 특징을 요약한 1~2줄 문장",
-  "tasting": "주요 아로마 및 풍미 피니시 특징",
-  "avgPrice": "실제 접근 가능한 평균 구매가 범위 (찾을 수 없으면 '정보없음')",
-  "bargainInfo": "성지 매장 특가 혹은 플랫폼 최저가 범위 정보 (없으면 '정보없음')"
-}`
-            }]
-          }],
-          tools: [{ "google_search": {} }]
-        };
-
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (response.status === 503 && i < maxRetries - 1) {
-          showToast(`⚠️ 구글 서버 혼잡으로 재시도 중입니다... (${i + 1}/${maxRetries}회)`, "info");
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-          continue;
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`API call failed: ${response.status} - ${errorText}`);
-        }
-
-        const result = await response.json();
-
-        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-          let rawText = result.candidates[0].content.parts[0].text;
-          // 마크다운 백틱 가드 클렌징
-          rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-          setSearchResult(JSON.parse(rawText));
-          break;
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 429) {
+          showToast("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요.", "error");
         } else {
-          throw new Error("Empty response parts");
+          showToast("검색 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", "error");
         }
-      } catch (err) {
-        if (i === maxRetries - 1) {
-          showToast("서버 통신 실패: API 키 또는 JSON 스키마 구조를 확인해 주세요.", "error");
-          console.error("최종 검색 에러:", err);
-        } else {
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-        }
-      } finally {
-        if (i === maxRetries - 1) setIsSearching(false);
+        console.error("검색 서버 에러:", response.status, errData);
+        return;
       }
+
+      const parsed = await response.json();
+      setSearchResult(parsed);
+    } catch (err) {
+      showToast("서버 통신에 실패했습니다.", "error");
+      console.error("최종 검색 에러:", err);
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -745,110 +699,69 @@ export default function TastingApp() {
   };
 
   const analyzeLabel = async (base64Image) => {
+    // ✅ [레벨2 - 로그인 게이트] 구글 로그인한 회원만 AI 라벨분석 사용 가능
+    if (!user || user.isAnonymous) {
+      showToast("AI 라벨 분석은 구글 로그인 후 이용할 수 있어요!", "error");
+      setImage(null);
+      return;
+    }
+
     setIsAnalyzing(true);
     setError(null);
     const base64Data = base64Image.split(',')[1];
 
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
-    // 🛠️ 템플릿 리터럴 내부에 변수가 누락 없이 정상 반영되도록 프롬프트 정제
-    const prompt = `주류 라벨 이미지 분석 요청.
-현재 선택한 주종 카테고리는 '${config.name}'입니다.
+    try {
+      // 키를 들고 구글을 부르는 건 서버(/api/analyze)가 한다. 브라우저는 이미지 데이터만 보낸다.
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data, liquorName: config.name })
+      });
 
-[커뮤니티 등록 가이드] 본 사진은 사용자가 직접 마시고 업로드하는 와인 라벨입니다. 텍스트 OCR 매칭 조건 없이 라벨 해독에만 집중하세요.
-[주종 자동 동기화 보정]
-실제 분석된 종류가 다를 경우 'detectedCategory' 항목에 알맞은 올바른 주종 키값('wine', 'whiskey', 'sake', 'beer' 중 하나)을 지정해주세요.`;
-    const payload = {
-      contents: [{
-        role: "user", parts: [
-          { text: prompt },
-          { inlineData: { mimeType: "image/jpeg", data: base64Data } }
-        ]
-      }],
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            "name": { type: "STRING", description: "주류의 정식 공식 명칭" },
-            "type": { type: "STRING", description: "상세 종류/스타일분류" },
-            "region": { type: "STRING", description: "생산지 국가 및 세부지역" },
-            "vintage": { type: "STRING", description: "빈티지 년도 또는 숙성연수 정보 (없을 경우 null)" },
-            "grape": { type: "STRING", description: "포도 품종, 사용 맥아, 주조미 쌀 품종, 캐스크 정보 등" },
-            "producer": { type: "STRING", description: "양조장/증류소/제조업체 명칭" },
-            "detectedCategory": { type: "STRING", description: "자동 판정 카테고리 ('wine', 'whiskey', 'sake', 'beer' 중 반드시 택일)" },
-            "isCodeDetected": { type: "BOOLEAN", description: "무조건 true로 반환하세요." }
-          },
-          required: ["name", "type", "region", "vintage", "grape", "producer", "detectedCategory", "isCodeDetected"]
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        if (response.status === 429) {
+          setError("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요.");
+        } else {
+          setError("정밀 분석 중 오류가 발생했습니다. 잠시 후 다시 이미지를 등록해 주세요.");
+        }
+        showToast("라벨 분석 실패", "error");
+        console.error("분석 서버 에러:", response.status, errData);
+        setIsAnalyzing(false);
+        return;
+      }
+
+      const parsed = await response.json();
+      setAnalysisResult(parsed);
+
+      if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
+        if (LIQUOR_CONFIG[parsed.detectedCategory]) {
+          setSelectedLiquorType(parsed.detectedCategory);
+          showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
         }
       }
-    };
+      // [와인 세부 변환 시스템] 라벨에서 '레드'/'화이트' 키워드 검출 시 하위 아로마/지표 레이아웃 자동 변환
+      if (parsed.detectedCategory === 'wine' || selectedLiquorType === 'wine') {
+        const isWhite = parsed.type?.toLowerCase().includes('white') || parsed.name?.toLowerCase().includes('white') || parsed.grape?.toLowerCase().includes('chardonnay') || parsed.type?.includes('화이트') || parsed.type?.includes('샴페인');
+        parsed.wineStyle = isWhite ? 'white' : 'red';
+        setAnalysisResult(parsed);
+      }
 
-    const maxRetries = 3;
-    let delay = 1500;
-
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (response.status === 503 && i < maxRetries - 1) {
-          showToast(`⚠️ 구글 서버 과부하로 재시도 중입니다... (${i + 1}/${maxRetries}회)`, "info");
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
-          continue;
-        }
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`API call failed: ${response.status} - ${errorText}`);
-        }
-
-        const result = await response.json();
-
-        if (result.candidates?.[0]?.content?.parts?.[0]?.text) {
-          const parsed = JSON.parse(result.candidates[0].content.parts[0].text);
-          setAnalysisResult(parsed);
-
-          if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
-            if (LIQUOR_CONFIG[parsed.detectedCategory]) {
-              setSelectedLiquorType(parsed.detectedCategory);
-              showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
-            }
-          }
-          // [와인 세부 변환 시스템 장착] 라벨에서 '레드' 혹은 '화이트' 키워드가 검출되면 하위 아로마/지표 레이아웃 자동 변환
-          if (parsed.detectedCategory === 'wine' || selectedLiquorType === 'wine') {
-            const isWhite = parsed.type?.toLowerCase().includes('white') || parsed.name?.toLowerCase().includes('white') || parsed.grape?.toLowerCase().includes('chardonnay') || parsed.type?.includes('화이트') || parsed.type?.includes('샴페인');
-            parsed.wineStyle = isWhite ? 'white' : 'red';
-            setAnalysisResult(parsed);
-          }
-
-          if (shareToCommunity) {
-            if (parsed.isCodeDetected) {
-              showToast("실물 인증코드가 성공적으로 감지되었습니다! 즉시 정식인증 마크가 부여됩니다.", "success");
-            } else {
-              showToast("쪽지 코드를 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.", "info");
-            }
-          }
-          setIsAnalyzing(false);
-          break;
+      if (shareToCommunity) {
+        if (parsed.isCodeDetected) {
+          showToast("실물 인증코드가 성공적으로 감지되었습니다! 즉시 정식인증 마크가 부여됩니다.", "success");
         } else {
-          throw new Error("Empty response parts");
-        }
-      } catch (err) {
-        if (i === maxRetries - 1) {
-          setError("구글 서버 통신 오류로 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요.");
-          showToast("라벨 분석 실패", "error");
-          console.error("최종 분석 에러:", err);
-          setIsAnalyzing(false);
-        } else {
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
+          showToast("쪽지 코드를 감지하지 못했습니다. 업로드 시 '집단지성 인증 투표' 상태로 등록됩니다.", "info");
         }
       }
+    } catch (err) {
+      setError("서버 통신 오류로 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요.");
+      showToast("라벨 분석 실패", "error");
+      console.error("최종 분석 에러:", err);
+    } finally {
+      setIsAnalyzing(false);
     }
   };
 
