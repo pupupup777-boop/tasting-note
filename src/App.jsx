@@ -197,6 +197,8 @@ const compressImage = (base64Str, maxWidth = 400) => {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       resolve(canvas.toDataURL('image/jpeg', 0.5));
     };
+    // ✅ [멈춤 방지] 이미지 로드 실패 시에도 Promise를 반드시 풀어준다 (원본 그대로 반환)
+    img.onerror = () => resolve(base64Str);
     img.src = base64Str;
   });
 };
@@ -307,13 +309,14 @@ export default function TastingApp() {
     if (!regionStr || regionStr === '-') return null;
     const lower = regionStr.toLowerCase();
     if (lower.includes('france') || lower.includes('프랑스') || lower.includes('bourgogne') || lower.includes('burgundy') || lower.includes('bordeaux') || lower.includes('champagne')) return '프랑스';
-    if (lower.includes('italy') || lower.includes('이탈리아') || lower.includes('toscana') || lower.includes('tuscan') || lower.includes(' Piedmont') || lower.includes('bdm')) return '이탈리아';
+    // ✅ [버그 수정] lower는 이미 소문자라 대문자 'Piedmont'는 절대 안 잡힘 → 소문자로 정정
+    if (lower.includes('italy') || lower.includes('이탈리아') || lower.includes('toscana') || lower.includes('tuscan') || lower.includes('piedmont') || lower.includes('piemonte') || lower.includes('bdm')) return '이탈리아';
     if (lower.includes('chile') || lower.includes('칠레') || lower.includes('colchagua')) return '칠레';
     if (lower.includes('usa') || lower.includes('america') || lower.includes('미국') || lower.includes('napa') || lower.includes('california')) return '미국';
     if (lower.includes('spain') || lower.includes('스페인') || lower.includes('rioja')) return '스페인';
     if (lower.includes('australia') || lower.includes('호주')) return '호주';
     if (lower.includes('zealand') || lower.includes('뉴질랜드')) return '뉴질랜드';
-    
+
     // 매핑에 없으면 공백 기준 첫 단어를 그대로 반환
     return regionStr.split(/[\s,+/]+/)[0].trim();
   };
@@ -349,6 +352,7 @@ export default function TastingApp() {
 
     return result;
   }, [safeNotes, listSortKey, filterStyle, filterRegion]);
+
   useEffect(() => {
     const initAuth = async () => {
       try {
@@ -370,41 +374,62 @@ export default function TastingApp() {
     return () => unsubscribe();
   }, []);
 
+  // ✅ [멈춤 핵심 수정 1/2] 내 노트 구독 — 단일 책임. 중첩 onSnapshot 제거.
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
     const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
-    const q = query(notesRef);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = [];
-      snapshot.forEach((doc) => data.push({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => b.createdAt - a.createdAt);
-      setNotes(data);
+    const unsubscribe = onSnapshot(
+      query(notesRef),
+      (snapshot) => {
+        const data = [];
+        snapshot.forEach((docSnap) => data.push({ id: docSnap.id, ...docSnap.data() }));
+        data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setNotes(data);
+      },
+      (err) => {
+        console.error("notes snapshot error:", err);
+      }
+    );
+    return () => unsubscribe();
+  }, [user?.uid]);
 
-      const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
-      onSnapshot(profileRef, (profileSnap) => {
+  // ✅ [멈춤 핵심 수정 2/2] 내 프로필 구독 — 리스너를 단 한 번만 생성하고 정리도 보장.
+  useEffect(() => {
+    if (!user?.uid) return;
+    const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info');
+
+    const unsubscribe = onSnapshot(
+      profileRef,
+      (profileSnap) => {
         if (profileSnap.exists()) {
           setUserProfile((p) => ({ ...p, ...profileSnap.data() }));
         } else {
           const randomNickname = '테이스터_' + Math.floor(1000 + Math.random() * 9000);
-          setDoc(profileRef, { nickname: randomNickname, createdAt: Date.now() });
+          setDoc(profileRef, { nickname: randomNickname, createdAt: Date.now() }, { merge: true })
+            .catch((e) => console.error("profile create error:", e));
           setUserProfile((p) => ({ ...p, nickname: randomNickname }));
         }
-      });
-    });
+      },
+      (err) => console.error("profile snapshot error:", err)
+    );
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
     const publicRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
-    const unsubscribe = onSnapshot(query(publicRef), (snapshot) => {
-      const data = [];
-      snapshot.forEach((doc) => data.push({ id: doc.id, ...doc.data() }));
-      setCommunityPosts(data);
-    });
+    const unsubscribe = onSnapshot(
+      query(publicRef),
+      (snapshot) => {
+        const data = [];
+        snapshot.forEach((docSnap) => data.push({ id: docSnap.id, ...docSnap.data() }));
+        setCommunityPosts(data);
+      },
+      (err) => console.error("community snapshot error:", err)
+    );
     return () => unsubscribe();
-  }, [user]);
+  }, [user?.uid]);
 
   const userStats = useMemo(() => {
     const stats = {};
@@ -787,6 +812,7 @@ export default function TastingApp() {
       }
     }
   };
+
   const handleSaveNote = async () => {
     if (!analysisResult) {
       showToast("라벨 분석이 아직 완료되지 않았습니다.", "error");
@@ -951,6 +977,7 @@ export default function TastingApp() {
       showToast("댓글 작성에 실패했습니다.", "error");
     }
   };
+
   const handleAddReply = async (postId, commentId) => {
     if (!user || !replyInputs[commentId]?.trim()) return;
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
@@ -1139,7 +1166,7 @@ export default function TastingApp() {
               </div>
             )}
             {config.criteria?.map(criteria => {
-              // 화이트 와인일 때 타닌 항목 숨기기 필터링 (f03e758f-2a8a-462b-b4ed-e663f9e9c2a8.jpg/ea8ea767-8e57-4d59-94d9-e8acaf1f85c3.jpg 지침 반영)
+              // 화이트 와인일 때 타닌 항목 숨기기 필터링
               const currentStyle = analysisResult?.wineStyle || 'red';
               if (selectedLiquorType === 'wine' && config.subTypes?.[currentStyle]?.excludeCriteria?.includes(criteria.id)) {
                 return null;
@@ -1280,8 +1307,8 @@ export default function TastingApp() {
           {/* 상단 헤더 및 가격 정렬 선택 휠 */}
           <div className="flex justify-between items-center">
             <h2 className="text-xs font-black text-gray-800">내 테이스팅 노트 ({processedNotes.length}개)</h2>
-            <select 
-              value={listSortKey} 
+            <select
+              value={listSortKey}
               onChange={(e) => setListSortKey(e.target.value)}
               className="text-[11px] font-black bg-gray-50 border border-gray-200 rounded-lg p-1.5 outline-none text-gray-700 cursor-pointer shadow-xs"
             >
@@ -1865,7 +1892,7 @@ export default function TastingApp() {
               {selectedDetailNote.originalRatings || selectedDetailNote.ratings ? Object.entries(selectedDetailNote.originalRatings || selectedDetailNote.ratings).map(([key, val]) => {
                 if (typeof val === 'object' || !['sweetness', 'acidity', 'tannin', 'body', 'mousse', 'finish', 'balance'].includes(key)) return null;
                 return (
-                  <div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0--------------">
+                  <div key={key} className="flex justify-between text-xs font-bold py-1.5 border-b border-gray-200/50 last:border-0">
                     <span className="text-gray-600">{key === 'sweetness' ? '당도' : key === 'acidity' ? '산미' : key === 'tannin' ? '타닌' : key === 'body' ? '바디감' : key === 'mousse' ? '기포감' : key === 'finish' ? '여운' : key === 'balance' ? '균형감' : key.toUpperCase()}</span>
                     <span className="text-rose-800 bg-white px-2 py-0.5 rounded border shadow-inner">★ {val} / 5</span>
                   </div>
