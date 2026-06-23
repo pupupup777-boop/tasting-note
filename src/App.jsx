@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc, getDocs } from 'firebase/firestore';
 
 const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "";
 
@@ -698,7 +698,6 @@ export default function TastingApp() {
   // ✅ 로그인 성공 후 프로필을 만들고 상태를 세팅하는 공통 처리 (팝업/리다이렉트 양쪽에서 재사용)
   const finalizeGoogleLogin = async (loggedInUser) => {
     const profileRef = doc(db, 'artifacts', appId, 'users', loggedInUser.uid, 'profile', 'info');
-    const { getDoc } = await import('firebase/firestore');
     const profileSnap = await getDoc(profileRef);
 
     let finalNickname = loggedInUser.displayName || 'Google유저_' + Math.floor(1000 + Math.random() * 9000);
@@ -754,7 +753,6 @@ export default function TastingApp() {
       await setDoc(profileRef, { nickname: nextName }, { merge: true });
 
       const publicPostsRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
-      const { getDocs } = await import('firebase/firestore');
       const querySnap = await getDocs(publicPostsRef);
 
       for (const postDoc of querySnap.docs) {
@@ -1045,7 +1043,6 @@ export default function TastingApp() {
       const lookupKey = normalizeWineName(extractedName);
       if (lookupKey) {
         try {
-          const { getDoc } = await import('firebase/firestore');
           const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', lookupKey);
           const snap = await getDoc(catalogRef);
           if (snap.exists()) {
@@ -1265,33 +1262,6 @@ export default function TastingApp() {
     } catch (err) {
       console.error("Vote mapping error:", err);
       showToast("투표 처리 중 서버 통신 오류가 발생했습니다.", "error");
-    }
-  };
-
-  const handleRatePost = async (postId, currentRatings, score) => {
-    if (!user) return;
-    // 🐛 [버그수정] 작성자 본인은 자기 보틀에 별점을 줄 수 없음 (단위 다른 점수 섞임 방지)
-    const targetPost = communityPosts.find(p => p.id === postId);
-    if (targetPost && targetPost.userId === user.uid) {
-      showToast("내 보틀에는 별점을 줄 수 없어요. 다른 분들의 평가를 받아보세요!", "info");
-      return;
-    }
-    const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
-    try {
-      const updatedRatings = { ...(currentRatings || {}) };
-      updatedRatings[user.uid] = score;
-      // 합산 시 작성자 본인 점수(과거 데이터에 섞여있을 수 있음)는 제외
-      const authorId = targetPost?.userId;
-      const totalScore = Object.entries(updatedRatings).reduce((acc, [uid, val]) => (uid === authorId ? acc : acc + (Number(val) || 0)), 0);
-      await updateDoc(postRef, { ratings: updatedRatings, totalCommunityScore: totalScore });
-
-      if (selectedDetailNote && selectedDetailNote.id === postId) {
-        setSelectedDetailNote(prev => ({ ...prev, ratings: updatedRatings, totalCommunityScore: totalScore }));
-      }
-
-      showToast(`${score}점을 부여했습니다!`);
-    } catch (err) {
-      showToast("평가 중 오류가 발생했습니다.", "error");
     }
   };
 
