@@ -1738,9 +1738,9 @@ export default function TastingApp() {
             <p className="text-sm text-gray-600 leading-relaxed font-medium mb-3">{insightResult.body}</p>
             <div className="space-y-2">
               {(insightResult.items || []).map((it, i) => (
-                <div key={i} className="flex gap-2.5 bg-gray-50 p-3 rounded-xl border border-gray-100">
-                  <span className={`shrink-0 font-black text-xs px-2 py-1 rounded-lg h-fit ${insightResult.mode === 'recommend' ? 'bg-indigo-600 text-white' : 'bg-rose-700 text-white'}`}>{it.label}</span>
-                  <span className="text-xs text-gray-600 font-medium leading-relaxed self-center">{it.desc}</span>
+                <div key={i} className="bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  <span className={`inline-block font-black text-xs px-2 py-1 rounded-lg mb-1.5 ${insightResult.mode === 'recommend' ? 'bg-indigo-600 text-white' : 'bg-rose-700 text-white'}`}>{it.label}</span>
+                  <p className="text-xs text-gray-600 font-medium leading-relaxed">{it.desc}</p>
                 </div>
               ))}
             </div>
