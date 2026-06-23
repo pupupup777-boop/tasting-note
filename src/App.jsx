@@ -473,6 +473,8 @@ export default function TastingApp() {
   const [usageInfo, setUsageInfo] = useState(null);            // Firestore usage 문서 캐시
 
   const fileInputRef = useRef(null);
+  const [inputMode, setInputMode] = useState('photo'); // 'photo' | 'name' : 추가하기 입력 방식
+  const [nameQuery, setNameQuery] = useState('');       // 이름으로 찾기 입력값
   // 📊 필터 및 정렬 연산 장치를 컴포넌트 최상단으로 격리 (무한 루프 에러 완치)
   const safeNotes = useMemo(() => Array.isArray(notes) ? notes : [], [notes]);
 
@@ -1152,6 +1154,94 @@ export default function TastingApp() {
     }
   };
 
+  // 🔤 사진 대신 "이름"으로 정보 찾기 (사진 분석과 동일한 캐시/한도/카탈로그 규칙)
+  const analyzeByName = async () => {
+    const q = (nameQuery || '').trim();
+    if (!q) { showToast("제품 이름을 입력해 주세요.", "info"); return; }
+    if (!user || user.isAnonymous) { showToast("AI 검색은 구글 로그인 후 이용할 수 있어요!", "error"); return; }
+
+    const allowed = await checkLabelLimit();
+    if (!allowed) { showToast(`라벨 분석은 하루 ${DAILY_LABEL_LIMIT}개까지예요. 자정에 초기화돼요!`, "info"); return; }
+
+    setIsAnalyzing(true);
+    setError(null);
+    setAnalysisResult(null);
+    setImage(null); // 사진 없이 진행
+    const config = LIQUOR_CONFIG[selectedLiquorType];
+
+    try {
+      // 캐시 확인
+      const lookupKey = normalizeWineName(q);
+      if (lookupKey) {
+        try {
+          const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', lookupKey);
+          const snap = await getDoc(catalogRef);
+          if (snap.exists()) {
+            const cached = snap.data();
+            if (cached.detectedCategory && LIQUOR_CONFIG[cached.detectedCategory] && cached.detectedCategory !== selectedLiquorType) {
+              setSelectedLiquorType(cached.detectedCategory);
+            }
+            setAnalysisResult(cached);
+            console.log("[CACHE HIT] (이름검색):", lookupKey);
+            showToast("🍷 정보를 불러왔어요!", "success");
+            await incrementLabelCount();
+            setNameQuery('');
+            setIsAnalyzing(false);
+            return;
+          }
+        } catch (e) { console.error("카탈로그 조회 실패:", e); }
+      }
+
+      // AI로 정보 생성
+      const res = await fetch('/api/analyze-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: q, liquorName: config.name })
+      });
+      if (!res.ok) {
+        if (res.status === 429) setError("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요.");
+        else setError("정보를 찾는 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+        showToast("검색 실패", "error");
+        setIsAnalyzing(false);
+        return;
+      }
+      const parsed = await res.json();
+
+      if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType && LIQUOR_CONFIG[parsed.detectedCategory]) {
+        setSelectedLiquorType(parsed.detectedCategory);
+      }
+      if (parsed.detectedCategory === 'wine' || selectedLiquorType === 'wine') {
+        const isWhite = parsed.type?.toLowerCase().includes('white') || parsed.name?.toLowerCase().includes('white') || parsed.grape?.toLowerCase().includes('chardonnay') || parsed.type?.includes('화이트') || parsed.type?.includes('샴페인');
+        parsed.wineStyle = isWhite ? 'white' : 'red';
+      }
+      setAnalysisResult(parsed);
+      console.log("[AI ANALYZE] (이름검색):", parsed.name);
+      showToast("✨ 정보를 찾았어요!", "success");
+      await incrementLabelCount();
+      setNameQuery('');
+
+      // 카탈로그 저장
+      const saveKey = normalizeWineName(parsed.name || q);
+      if (saveKey) {
+        try {
+          const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
+          await setDoc(catalogRef, {
+            name: parsed.name || q, type: parsed.type || '', region: parsed.region || '',
+            vintage: parsed.vintage || '', grape: parsed.grape || '', producer: parsed.producer || '',
+            detectedCategory: parsed.detectedCategory || selectedLiquorType, wineStyle: parsed.wineStyle || null,
+            createdAt: Date.now(), firstBy: user.uid
+          }, { merge: true });
+        } catch (e) { console.error("카탈로그 저장 실패:", e); }
+      }
+    } catch (err) {
+      setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요.");
+      showToast("검색 실패", "error");
+      console.error("이름 검색 에러:", err);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleSaveNote = async () => {
     if (!analysisResult) {
       showToast("라벨 분석이 아직 완료되지 않았습니다.", "error");
@@ -1488,7 +1578,13 @@ export default function TastingApp() {
             </div>
           )}
 
-          {!image ? (
+          {/* 입력 방식 전환: 사진 / 이름 */}
+          <div className="flex gap-1.5 mb-3 bg-gray-100 p-1 rounded-xl">
+            <button onClick={() => setInputMode('photo')} className={`flex-1 py-2 rounded-lg text-xs font-black transition-all ${inputMode === 'photo' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400'}`}>📸 사진 촬영</button>
+            <button onClick={() => setInputMode('name')} className={`flex-1 py-2 rounded-lg text-xs font-black transition-all ${inputMode === 'name' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400'}`}>🔤 이름으로 찾기</button>
+          </div>
+
+          {inputMode === 'photo' && (!image ? (
             <div onClick={triggerFileInput} className={`border-2 border-dashed ${theme.border} rounded-xl p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors group flex flex-col items-center justify-center h-48 bg-gray-50/50`}>
               <Icon name="Camera" className={`w-12 h-12 ${theme.text} opacity-50 mb-3`} />
               <p className={`font-medium ${theme.text}`}>라벨 사진 촬영</p>
@@ -1507,6 +1603,27 @@ export default function TastingApp() {
                   </span>
                 </div>
               )}
+            </div>
+          ))}
+
+          {inputMode === 'name' && (
+            <div className="space-y-2.5">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={nameQuery}
+                  onChange={(e) => setNameQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !isAnalyzing) analyzeByName(); }}
+                  placeholder={`${config.name} 이름을 입력하세요 (예: 켄달잭슨 샤르도네)`}
+                  className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-gray-300"
+                />
+                <button
+                  onClick={analyzeByName}
+                  disabled={isAnalyzing || !nameQuery.trim()}
+                  className={`px-4 rounded-xl font-black text-sm shrink-0 transition-all ${isAnalyzing || !nameQuery.trim() ? 'bg-gray-200 text-gray-400' : 'bg-gray-900 text-white active:scale-95'}`}
+                >찾기</button>
+              </div>
+              <p className="text-[11px] text-gray-400 font-medium px-1">📷 사진이 어렵거나 병이 없을 때, 이름만으로 정보를 찾아 노트를 작성할 수 있어요.</p>
             </div>
           )}
 
