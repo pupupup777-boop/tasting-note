@@ -1643,7 +1643,7 @@ export default function TastingApp() {
             <div className={`mb-6 p-5 rounded-2xl border ${wineBorderClass} ${wineBgClass} shadow-sm transition-all duration-300`}>
               <div className="flex justify-between items-center mb-3">
                 <label className="text-xs font-black text-gray-700 uppercase tracking-tight flex items-center gap-1">
-                  🍷 와인 잔 만족도 테이스팅 (1 ~ 100)
+                  {config.icon} {config.name} 잔 만족도 테이스팅 (1 ~ 100)
                 </label>
                 <span className={`text-2xl font-mono font-black bg-white px-3 py-1 rounded-xl shadow-sm border ${wineBorderClass} ${wineTextClass}`}>
                   {overallRating || 50} <span className="text-xs font-medium text-gray-400">점</span>
@@ -1660,7 +1660,7 @@ export default function TastingApp() {
 
             <textarea
               rows="3" value={personalNotes} onChange={(e) => setPersonalNotes(e.target.value)}
-              placeholder="와인의 느낌이나 기억하고 싶은 한줄평을 적어주세요."
+              placeholder={`${config.name}의 느낌이나 기억하고 싶은 한줄평을 적어주세요.`}
               className="w-full px-4 py-3 bg-gray-50 text-gray-700 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-300 resize-none text-sm font-medium"
             />
           </div>
