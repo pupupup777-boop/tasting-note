@@ -430,6 +430,7 @@ export default function TastingApp() {
   const [shareToCommunity, setShareToCommunity] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
   const [commentInputs, setCommentInputs] = useState({});
+  const [pendingRatings, setPendingRatings] = useState({}); // 🎚️ 드래그로 골라둔(아직 미확정) 별점. 댓글 작성 시 확정됨
   const [replyInputs, setReplyInputs] = useState({});
   const [activeReplyBox, setActiveReplyBox] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
@@ -917,7 +918,8 @@ export default function TastingApp() {
               setSelectedLiquorType(cached.detectedCategory);
             }
             setAnalysisResult(cached);
-            showToast("이미 등록된 와인이라 정보를 바로 불러왔어요! (AI 절약 ✨)", "success");
+            console.log("[CACHE HIT] 카탈로그에서 불러옴 (AI 미사용):", lookupKey);
+            showToast("🍷 주종을 감지했습니다!", "success");
             setIsAnalyzing(false);
             return; // 🎯 비싼 상세분석 스킵
           }
@@ -953,7 +955,6 @@ export default function TastingApp() {
       if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
         if (LIQUOR_CONFIG[parsed.detectedCategory]) {
           setSelectedLiquorType(parsed.detectedCategory);
-          showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
         }
       }
       // [와인 세부 변환] 라벨에서 '레드'/'화이트' 키워드 검출 시 스타일 지정
@@ -962,6 +963,8 @@ export default function TastingApp() {
         parsed.wineStyle = isWhite ? 'white' : 'red';
       }
       setAnalysisResult(parsed);
+      console.log("[AI ANALYZE] AI로 새로 분석함:", parsed.name);
+      showToast("✨ 주종을 감지했습니다!", "success");
 
       // 🗂️ 공용 카탈로그에 저장 → 다음 사람은 이 와인을 AI 상세분석 없이 가져감
       const saveKey = normalizeWineName(parsed.name);
@@ -1162,13 +1165,42 @@ export default function TastingApp() {
       const newComment = {
         id: Date.now().toString() + Math.random(), userId: user.uid, userName: userProfile.nickname, text: commentInputs[postId].trim(), createdAt: Date.now()
       };
-      await updateDoc(postRef, { comments: arrayUnion(newComment) });
+
+      // 🎯 댓글 작성 시: 드래그로 골라둔 별점이 있으면 이때 함께 "확정"한다.
+      const targetPost = communityPosts.find(p => p.id === postId);
+      const pending = pendingRatings[postId];
+      const isAuthor = targetPost?.userId === user.uid;
+      const alreadyRated = targetPost?.ratings?.[user.uid] != null;
+
+      const updatePayload = { comments: arrayUnion(newComment) };
+      let committedRatings = null;
+      let committedTotal = null;
+
+      if (pending != null && !isAuthor && !alreadyRated) {
+        const updatedRatings = { ...(targetPost?.ratings || {}) };
+        updatedRatings[user.uid] = pending;
+        const authorId = targetPost?.userId;
+        committedTotal = Object.entries(updatedRatings).reduce((acc, [uid, val]) => (uid === authorId ? acc : acc + (Number(val) || 0)), 0);
+        committedRatings = updatedRatings;
+        updatePayload.ratings = updatedRatings;
+        updatePayload.totalCommunityScore = committedTotal;
+      }
+
+      await updateDoc(postRef, updatePayload);
 
       if (selectedDetailNote && selectedDetailNote.id === postId) {
-        setSelectedDetailNote(prev => ({ ...prev, comments: [...(prev.comments || []), newComment] }));
+        setSelectedDetailNote(prev => ({
+          ...prev,
+          comments: [...(prev.comments || []), newComment],
+          ...(committedRatings ? { ratings: committedRatings, totalCommunityScore: committedTotal } : {})
+        }));
       }
 
       setCommentInputs(p => ({ ...p, [postId]: '' }));
+      if (committedRatings) {
+        setPendingRatings(p => { const n = { ...p }; delete n[postId]; return n; });
+        showToast(`댓글과 함께 ${pending}점이 확정되었습니다!`, "success");
+      }
     } catch (err) {
       showToast("댓글 작성에 실패했습니다.", "error");
     }
@@ -1776,8 +1808,8 @@ export default function TastingApp() {
                         ) : isRatingLocked ? (
                           <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[11px] px-2.5 py-1.5 rounded-xl shadow-sm whitespace-nowrap">🔒 평가 완료 ({myRating.toFixed(1)}점)</div>
                         ) : (
-                          <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; handleRatePost(post.id, post.ratings, calculated); }}>
-                            <FractionalStarRating value={myRating} onChange={(score) => handleRatePost(post.id, post.ratings, score)} />
+                          <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; setPendingRatings(p => ({ ...p, [post.id]: calculated })); }}>
+                            <FractionalStarRating value={pendingRatings[post.id] ?? myRating} onChange={(score) => setPendingRatings(p => ({ ...p, [post.id]: score }))} />
                           </div>
                         )}
                       </div>
@@ -2186,9 +2218,12 @@ export default function TastingApp() {
                 </div>
               </div>
 
-              {selectedDetailNote.personalNotes && (
-                <div className="text-sm text-gray-700 bg-slate-50 p-4 rounded-2xl border border-gray-100 font-medium leading-relaxed italic">
-                  "{selectedDetailNote.personalNotes}"
+              {(selectedDetailNote.personalNotes || selectedDetailNote.overallRating) && (
+                <div className="text-sm text-gray-700 bg-slate-50 p-4 rounded-2xl border border-gray-100 font-medium leading-relaxed italic flex items-start gap-2">
+                  {selectedDetailNote.overallRating ? (
+                    <span className="not-italic shrink-0 bg-rose-800 text-white font-black text-xs px-2 py-0.5 rounded-lg font-mono">{selectedDetailNote.overallRating}점</span>
+                  ) : null}
+                  <span>{selectedDetailNote.personalNotes ? `"${selectedDetailNote.personalNotes}"` : ''}</span>
                 </div>
               )}
 
@@ -2220,8 +2255,8 @@ export default function TastingApp() {
                       🔒 평가 완료 ({(selectedDetailNote.ratings?.[user?.uid] || 0).toFixed(1)}점)
                     </div>
                   ) : (
-                    <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; handleRatePost(selectedDetailNote.id, selectedDetailNote.ratings, calculated); }}>
-                      <FractionalStarRating value={selectedDetailNote.ratings?.[user?.uid] || 0} onChange={(score) => handleRatePost(selectedDetailNote.id, selectedDetailNote.ratings, score)} />
+                    <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; setPendingRatings(p => ({ ...p, [selectedDetailNote.id]: calculated })); }}>
+                      <FractionalStarRating value={pendingRatings[selectedDetailNote.id] ?? (selectedDetailNote.ratings?.[user?.uid] || 0)} onChange={(score) => setPendingRatings(p => ({ ...p, [selectedDetailNote.id]: score }))} />
                     </div>
                   )}
                 </div>
