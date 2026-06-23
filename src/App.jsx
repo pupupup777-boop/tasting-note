@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
 
 const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "";
 
@@ -464,6 +464,12 @@ export default function TastingApp() {
   const [searchResult, setSearchResult] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
 
+  // 🧠 취향분석 (B: 취향총평 / C: 취향 밖 추천) + 사용량 제한
+  const [insightResult, setInsightResult] = useState(null);   // { mode, liquorType, title, body, items }
+  const [insightLoading, setInsightLoading] = useState('');    // '' | 'taste' | 'recommend'
+  const [insightPickMode, setInsightPickMode] = useState('');  // '' | 'taste' | 'recommend' : 주종 선택 대기 중인 모드
+  const [usageInfo, setUsageInfo] = useState(null);            // Firestore usage 문서 캐시
+
   const fileInputRef = useRef(null);
   // 📊 필터 및 정렬 연산 장치를 컴포넌트 최상단으로 격리 (무한 루프 에러 완치)
   const safeNotes = useMemo(() => Array.isArray(notes) ? notes : [], [notes]);
@@ -870,10 +876,133 @@ export default function TastingApp() {
     }
   };
 
+  // ═══════════════════════════════════════════════
+  // 🧠 사용량 제한 (Firestore 서버저장, 우회불가) + 취향분석
+  // ═══════════════════════════════════════════════
+  const DAILY_LABEL_LIMIT = 5;
+  const INSIGHT_COOLDOWN_MS = 5 * 24 * 60 * 60 * 1000; // 5일
+
+  const usageDocRef = () => doc(db, 'artifacts', appId, 'users', user.uid, 'meta', 'usage');
+  const getTodayStr = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
+
+  const fetchUsage = async () => {
+    if (!user || user.isAnonymous) return null;
+    try {
+      const snap = await getDoc(usageDocRef());
+      const data = snap.exists() ? snap.data() : {};
+      setUsageInfo(data);
+      return data;
+    } catch (e) { console.error('사용량 조회 실패:', e); return null; }
+  };
+
+  // 라벨분석 일일 한도 체크 + 카운트(+1). true면 진행 허용, false면 한도초과
+  const checkAndCountLabel = async () => {
+    try {
+      const ref = usageDocRef();
+      const snap = await getDoc(ref);
+      const data = snap.exists() ? snap.data() : {};
+      const today = getTodayStr();
+      const count = (data.labelDate === today) ? (data.labelCount || 0) : 0;
+      if (count >= DAILY_LABEL_LIMIT) return false;
+      await setDoc(ref, { labelDate: today, labelCount: count + 1 }, { merge: true });
+      setUsageInfo(prev => ({ ...(prev || {}), labelDate: today, labelCount: count + 1 }));
+      return true;
+    } catch (e) {
+      console.error('라벨 사용량 체크 실패:', e);
+      return true; // 체크 실패 시 사용자 경험 우선으로 막지 않음
+    }
+  };
+
+  // 취향분석 실행 (mode: 'taste'=내 취향 총평 / 'recommend'=취향 밖 추천)
+  const runInsight = async (mode, liquorType) => {
+    if (!user || user.isAnonymous) { showToast('취향분석은 구글 로그인 후 이용할 수 있어요!', 'error'); return; }
+    if (!safeNotes || safeNotes.length === 0) { showToast('기록이 있어야 분석할 수 있어요. 먼저 시음 노트를 남겨보세요!', 'info'); return; }
+
+    // 선택한 주종의 노트만 추림
+    const typeNotes = safeNotes.filter(n => (n.liquorType || n.analysisResult?.detectedCategory) === liquorType);
+    if (typeNotes.length === 0) { showToast('이 주종으로 기록한 노트가 없어요!', 'info'); return; }
+
+    const ref = usageDocRef();
+    let data = {};
+    try { const snap = await getDoc(ref); data = snap.exists() ? snap.data() : {}; } catch (e) { data = {}; }
+
+    const field = mode === 'recommend' ? 'lastRecommendAt' : 'lastTasteAt';
+    const last = data[field] || 0;
+    const elapsed = Date.now() - last;
+    if (elapsed < INSIGHT_COOLDOWN_MS) {
+      const daysLeft = Math.ceil((INSIGHT_COOLDOWN_MS - elapsed) / (24 * 60 * 60 * 1000));
+      showToast(`이 분석은 5일에 한 번만 가능해요. ${daysLeft}일 후에 다시 받아보세요!`, 'info');
+      return;
+    }
+
+    setInsightLoading(mode);
+    setInsightPickMode('');
+    setInsightResult(null);
+
+    const liquorName = LIQUOR_CONFIG[liquorType]?.name || liquorType;
+
+    // 선택 주종 노트 → 컴팩트 프로필 (점수/맛지표/아로마 포함)
+    const profile = typeNotes.slice(0, 50).map(n => {
+      const a = n.analysisResult || {};
+      return {
+        type: n.liquorType || a.detectedCategory || '',
+        name: a.name || '',
+        style: a.wineStyle || a.type || '',
+        region: a.region || '',
+        grape: a.grape || '',
+        rating: n.overallRating || 0,
+        palate: n.ratings || {},
+        aromas: n.selectedAromas || []
+      };
+    });
+
+    try {
+      const res = await fetch('/api/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, profile, liquorName })
+      });
+      if (!res.ok) {
+        if (res.status === 429) showToast('이번 달 AI 한도를 초과했어요. 잠시 후 다시 시도해 주세요.', 'error');
+        else showToast('취향분석 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.', 'error');
+        setInsightLoading('');
+        return;
+      }
+      const parsed = await res.json();
+      setInsightResult({ mode, liquorType, liquorName, ...parsed });
+
+      const now = Date.now();
+      await setDoc(ref, { [field]: now }, { merge: true });
+      setUsageInfo(prev => ({ ...(prev || {}), [field]: now }));
+      console.log(`[INSIGHT ${mode}/${liquorType}] 분석 완료`);
+    } catch (e) {
+      showToast('서버 통신 오류로 분석이 지연되고 있어요. 잠시 후 다시 시도해 주세요.', 'error');
+      console.error('취향분석 에러:', e);
+    } finally {
+      setInsightLoading('');
+    }
+  };
+
+  // 취향분석 화면 진입 시 사용량(쿨다운/일일카운트) 불러오기
+  useEffect(() => {
+    if (currentView === 'insights' && user && !user.isAnonymous) {
+      fetchUsage();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, user]);
+
   const analyzeLabel = async (base64Image) => {
     // ✅ [레벨2 - 로그인 게이트] 구글 로그인한 회원만 AI 라벨분석 사용 가능
     if (!user || user.isAnonymous) {
       showToast("AI 라벨 분석은 구글 로그인 후 이용할 수 있어요!", "error");
+      setImage(null);
+      return;
+    }
+
+    // 🚦 [일일 한도] 하루 5개까지 (자정 리셋, Firestore 저장)
+    const allowed = await checkAndCountLabel();
+    if (!allowed) {
+      showToast(`라벨 분석은 하루 ${DAILY_LABEL_LIMIT}개까지예요. 자정에 초기화돼요!`, "info");
       setImage(null);
       return;
     }
@@ -1499,13 +1628,120 @@ export default function TastingApp() {
     );
   };
 
-  const renderInsightsView = () => (
-    <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center animate-in fade-in">
-      <Icon name="BarChart3" className="w-12 h-12 text-indigo-300 mx-auto mb-3" />
-      <h2 className="text-xl font-bold mb-2">나의 취향 분석</h2>
-      <p className="text-gray-500 text-sm">지금까지 {notes.length}병을 기록하셨습니다!<br />데이터가 더 쌓이면 선호하는 품종 및 캐스크 선호도를 알려드릴게요.</p>
-    </div>
-  );
+  const renderInsightsView = () => {
+    const cooldownDays = (field) => {
+      const last = usageInfo?.[field] || 0;
+      const elapsed = Date.now() - last;
+      if (elapsed >= INSIGHT_COOLDOWN_MS) return 0;
+      return Math.ceil((INSIGHT_COOLDOWN_MS - elapsed) / (24 * 60 * 60 * 1000));
+    };
+    const tasteCd = cooldownDays('lastTasteAt');
+    const recCd = cooldownDays('lastRecommendAt');
+    const today = getTodayStr();
+    const usedToday = usageInfo?.labelDate === today ? (usageInfo?.labelCount || 0) : 0;
+    const noNotes = !safeNotes || safeNotes.length === 0;
+
+    // 내가 기록한 주종 집계 (많은 순)
+    const typeCounts = {};
+    safeNotes.forEach(n => { const t = n.liquorType || n.analysisResult?.detectedCategory; if (t) typeCounts[t] = (typeCounts[t] || 0) + 1; });
+    const sortedTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]);
+
+    return (
+      <div className="space-y-4 animate-in fade-in">
+        <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex items-center gap-2 mb-1">
+            <Icon name="BarChart3" className="w-6 h-6 text-indigo-500" />
+            <h2 className="text-lg font-black">나의 취향 분석</h2>
+          </div>
+          <p className="text-gray-500 text-xs font-medium">지금까지 <b className="text-gray-800">{safeNotes.length}병</b>을 기록하셨어요. AI가 당신이 매긴 점수와 취향을 분석해드려요.</p>
+          <p className="text-[10px] text-gray-400 mt-1.5 font-mono">오늘 라벨분석 {usedToday}/{DAILY_LABEL_LIMIT} · 취향분석은 5일에 1번</p>
+        </div>
+
+        {/* B: 내 취향 총평 / C: 취향 밖 추천 버튼 → 누르면 주종 선택 */}
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setInsightPickMode(insightPickMode === 'taste' ? '' : 'taste')}
+            disabled={insightLoading !== '' || noNotes || tasteCd > 0}
+            className={`p-4 rounded-2xl border text-left transition-all ${insightLoading !== '' || noNotes || tasteCd > 0 ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : insightPickMode === 'taste' ? 'bg-rose-700 border-rose-800 text-white shadow-lg ring-2 ring-rose-300' : 'bg-gradient-to-br from-rose-500 to-rose-700 border-rose-700 text-white shadow-md active:scale-95'}`}
+          >
+            <div className="text-lg mb-0.5">🍷</div>
+            <div className="font-black text-sm">내 취향 총평</div>
+            <div className={`text-[10px] mt-0.5 font-bold ${insightLoading !== '' || noNotes || tasteCd > 0 ? 'text-gray-400' : 'text-rose-100'}`}>
+              {insightLoading === 'taste' ? '분석 중...' : tasteCd > 0 ? `${tasteCd}일 후 가능` : insightPickMode === 'taste' ? '주종을 골라주세요 ↓' : '지금까지의 취향 해석'}
+            </div>
+          </button>
+
+          <button
+            onClick={() => setInsightPickMode(insightPickMode === 'recommend' ? '' : 'recommend')}
+            disabled={insightLoading !== '' || noNotes || recCd > 0}
+            className={`p-4 rounded-2xl border text-left transition-all ${insightLoading !== '' || noNotes || recCd > 0 ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : insightPickMode === 'recommend' ? 'bg-purple-700 border-purple-800 text-white shadow-lg ring-2 ring-purple-300' : 'bg-gradient-to-br from-indigo-500 to-purple-700 border-purple-700 text-white shadow-md active:scale-95'}`}
+          >
+            <div className="text-lg mb-0.5">🧭</div>
+            <div className="font-black text-sm">취향 밖 추천</div>
+            <div className={`text-[10px] mt-0.5 font-bold ${insightLoading !== '' || noNotes || recCd > 0 ? 'text-gray-400' : 'text-indigo-100'}`}>
+              {insightLoading === 'recommend' ? '분석 중...' : recCd > 0 ? `${recCd}일 후 가능` : insightPickMode === 'recommend' ? '주종을 골라주세요 ↓' : '안 마셔본 다른 스타일'}
+            </div>
+          </button>
+        </div>
+
+        {/* 주종 선택 패널 */}
+        {insightPickMode !== '' && insightLoading === '' && (
+          <div className="bg-white p-4 rounded-2xl shadow-sm border-2 border-dashed border-gray-200 animate-in fade-in slide-in-from-top-1">
+            <p className="text-xs font-black text-gray-700 mb-2.5">
+              {insightPickMode === 'recommend' ? '🧭 어떤 주종에서 새 스타일을 추천받을까요?' : '🍷 어떤 주종의 취향을 분석할까요?'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {sortedTypes.map(([type, count]) => {
+                const conf = LIQUOR_CONFIG[type] || { name: type, icon: '🍸' };
+                return (
+                  <button
+                    key={type}
+                    onClick={() => runInsight(insightPickMode, type)}
+                    className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-900 hover:text-white border border-gray-200 px-3 py-2 rounded-xl text-xs font-black text-gray-700 transition-all active:scale-95"
+                  >
+                    <span>{conf.icon || '🍸'}</span>
+                    <span>{conf.name}</span>
+                    <span className="opacity-60 font-mono">{count}병</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {noNotes && (
+          <p className="text-center text-xs text-gray-400 font-medium py-2">먼저 시음 노트를 남기면 분석을 받을 수 있어요!</p>
+        )}
+
+        {/* 로딩 */}
+        {insightLoading !== '' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
+            <div className="inline-block w-6 h-6 border-2 border-indigo-300 border-t-indigo-600 rounded-full animate-spin mb-2"></div>
+            <p className="text-sm text-gray-500 font-bold">AI가 당신의 취향을 분석하고 있어요...</p>
+          </div>
+        )}
+
+        {/* 결과 */}
+        {insightResult && insightLoading === '' && (
+          <div className={`bg-white p-5 rounded-2xl shadow-sm border-2 ${insightResult.mode === 'recommend' ? 'border-indigo-200' : 'border-rose-200'} animate-in fade-in slide-in-from-bottom-2`}>
+            <div className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full mb-2 ${insightResult.mode === 'recommend' ? 'bg-indigo-100 text-indigo-700' : 'bg-rose-100 text-rose-700'}`}>
+              {insightResult.mode === 'recommend' ? '🧭 취향 밖 추천' : '🍷 내 취향 총평'}{insightResult.liquorName ? ` · ${insightResult.liquorName}` : ''}
+            </div>
+            <h3 className="text-lg font-black text-gray-900 mb-1.5">{insightResult.title}</h3>
+            <p className="text-sm text-gray-600 leading-relaxed font-medium mb-3">{insightResult.body}</p>
+            <div className="space-y-2">
+              {(insightResult.items || []).map((it, i) => (
+                <div key={i} className="flex gap-2.5 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  <span className={`shrink-0 font-black text-xs px-2 py-1 rounded-lg h-fit ${insightResult.mode === 'recommend' ? 'bg-indigo-600 text-white' : 'bg-rose-700 text-white'}`}>{it.label}</span>
+                  <span className="text-xs text-gray-600 font-medium leading-relaxed self-center">{it.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderListView = () => {
 
