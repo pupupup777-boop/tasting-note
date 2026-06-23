@@ -1192,14 +1192,32 @@ export default function TastingApp() {
         } catch (e) { console.error("카탈로그 조회 실패:", e); }
       }
 
-      // AI로 정보 생성
-      const res = await fetch('/api/analyze-name', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: q, liquorName: config.name })
-      });
+      // AI로 정보 생성 (30초 타임아웃 — 무한 로딩 방지)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      let res;
+      try {
+        res = await fetch('/api/analyze-name', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: q, liquorName: config.name }),
+          signal: controller.signal
+        });
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        if (fetchErr.name === 'AbortError') {
+          setError("검색이 너무 오래 걸려요. 잠시 후 다시 시도하거나 사진으로 등록해 주세요.");
+        } else {
+          setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요.");
+        }
+        showToast("검색 실패", "error");
+        setIsAnalyzing(false);
+        return;
+      }
+      clearTimeout(timeoutId);
       if (!res.ok) {
         if (res.status === 429) setError("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요.");
+        else if (res.status === 503) setError("지금 검색 서버가 혼잡해요. 잠시 후 다시 시도해 주세요.");
         else setError("정보를 찾는 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
         showToast("검색 실패", "error");
         setIsAnalyzing(false);
