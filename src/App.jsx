@@ -899,22 +899,33 @@ export default function TastingApp() {
     } catch (e) { console.error('사용량 조회 실패:', e); return null; }
   };
 
-  // 라벨분석 일일 한도 체크 + 카운트(+1). true면 진행 허용, false면 한도초과
-  // 관리자도 카운트는 쌓되(모니터링용) 한도로 막지는 않음
-  const checkAndCountLabel = async () => {
+  // 라벨분석 한도 체크만 (카운트 안 함). true면 진행 허용, false면 한도초과
+  const checkLabelLimit = async () => {
+    if (isAdmin) return true; // 👑 관리자는 항상 허용
+    try {
+      const snap = await getDoc(usageDocRef());
+      const data = snap.exists() ? snap.data() : {};
+      const today = getTodayStr();
+      const count = (data.labelDate === today) ? (data.labelCount || 0) : 0;
+      return count < DAILY_LABEL_LIMIT;
+    } catch (e) {
+      console.error('라벨 한도 체크 실패:', e);
+      return true; // 체크 실패 시 막지 않음
+    }
+  };
+
+  // 라벨분석 카운트 +1 (분석이 성공했을 때만 호출). 관리자도 모니터링용으로 카운트는 쌓임
+  const incrementLabelCount = async () => {
     try {
       const ref = usageDocRef();
       const snap = await getDoc(ref);
       const data = snap.exists() ? snap.data() : {};
       const today = getTodayStr();
       const count = (data.labelDate === today) ? (data.labelCount || 0) : 0;
-      if (!isAdmin && count >= DAILY_LABEL_LIMIT) return false; // 👑 관리자는 막지 않음
       await setDoc(ref, { labelDate: today, labelCount: count + 1 }, { merge: true });
       setUsageInfo(prev => ({ ...(prev || {}), labelDate: today, labelCount: count + 1 }));
-      return true;
     } catch (e) {
-      console.error('라벨 사용량 체크 실패:', e);
-      return true; // 체크 실패 시 사용자 경험 우선으로 막지 않음
+      console.error('라벨 카운트 실패:', e);
     }
   };
 
@@ -1005,8 +1016,8 @@ export default function TastingApp() {
       return;
     }
 
-    // 🚦 [일일 한도] 하루 5개까지 (자정 리셋, Firestore 저장)
-    const allowed = await checkAndCountLabel();
+    // 🚦 [일일 한도] 하루 5개까지 (자정 리셋). 여기선 체크만, 카운트는 성공 시에만
+    const allowed = await checkLabelLimit();
     if (!allowed) {
       showToast(`라벨 분석은 하루 ${DAILY_LABEL_LIMIT}개까지예요. 자정에 초기화돼요!`, "info");
       setImage(null);
@@ -1015,6 +1026,7 @@ export default function TastingApp() {
 
     setIsAnalyzing(true);
     setError(null);
+    setAnalysisResult(null); // 새 분석 시작 시 이전 결과 초기화 (다시 찍기 대응)
     const base64Data = base64Image.split(',')[1];
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1054,6 +1066,7 @@ export default function TastingApp() {
             setAnalysisResult(cached);
             console.log("[CACHE HIT] 카탈로그에서 불러옴 (AI 미사용):", lookupKey);
             showToast("🍷 주종을 감지했습니다!", "success");
+            await incrementLabelCount(); // ✅ 성공했으니 카운트
             setIsAnalyzing(false);
             return; // 🎯 비싼 상세분석 스킵
           }
@@ -1099,6 +1112,7 @@ export default function TastingApp() {
       setAnalysisResult(parsed);
       console.log("[AI ANALYZE] AI로 새로 분석함:", parsed.name);
       showToast("✨ 주종을 감지했습니다!", "success");
+      await incrementLabelCount(); // ✅ 성공했으니 카운트
 
       // 🗂️ 공용 카탈로그에 저장 → 다음 사람은 이 와인을 AI 상세분석 없이 가져감
       const saveKey = normalizeWineName(parsed.name);
@@ -1481,15 +1495,25 @@ export default function TastingApp() {
               <p className="text-xs text-gray-400 mt-1">AI가 품종, 원재료 및 테마를 자동 감지합니다</p>
             </div>
           ) : (
-            <div className="relative rounded-xl overflow-hidden shadow-inner border border-gray-200">
+            <div
+              onClick={() => { if (!isAnalyzing) triggerFileInput(); }}
+              className={`relative rounded-xl overflow-hidden shadow-inner border border-gray-200 group ${isAnalyzing ? '' : 'cursor-pointer'}`}
+            >
               <img src={image} alt="Label" className="w-full h-48 object-contain bg-gray-100" />
+              {!isAnalyzing && (
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 active:bg-black/40 flex items-center justify-center transition-colors">
+                  <span className="opacity-0 group-hover:opacity-100 active:opacity-100 text-white text-sm font-black flex items-center gap-1.5 bg-black/50 px-3 py-1.5 rounded-full transition-opacity">
+                    <Icon name="Camera" className="w-4 h-4" /> 다시 찍기
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
           {isAnalyzing && (
             <div className="mt-4 flex flex-col items-center justify-center p-4 bg-gray-50 text-gray-800 rounded-xl border">
               <Icon name="Loader2" className="w-6 h-6 animate-spin mb-2" />
-              <p className="text-sm font-medium">AI가 라벨 및 실물인증코드를 대조 해독 중입니다...</p>
+              <p className="text-sm font-medium">라벨을 읽어 정보를 찾고 있어요...</p>
             </div>
           )}
           {error && <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-xl text-sm border border-red-100">{error}</div>}
