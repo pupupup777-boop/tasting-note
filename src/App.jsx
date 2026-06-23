@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc } from 'firebase/firestore';
 
 const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "";
 
@@ -165,7 +165,8 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
     Check: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />,
     Loader2: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />,
     List: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />,
-    BarChart3: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M18 17V9M13 17V5M8 17v-7" />
+    BarChart3: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M18 17V9M13 17V5M8 17v-7" />,
+    Trash: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
   };
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1294,6 +1295,54 @@ export default function TastingApp() {
     }
   };
 
+  // 🗑️ 라운지 글 삭제 (작성자 본인만)
+  const handleDeletePost = async (post) => {
+    if (!user || !post) return;
+    if (post.userId !== user.uid) { showToast("내가 쓴 글만 삭제할 수 있어요.", "error"); return; }
+    if (!window.confirm("이 글을 삭제할까요? 달린 댓글과 평점도 함께 사라지며 되돌릴 수 없어요.")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', post.id));
+      if (selectedDetailNote && selectedDetailNote.id === post.id) setSelectedDetailNote(null);
+      showToast("글이 삭제되었습니다.", "success");
+    } catch (err) {
+      showToast("삭제 중 오류가 발생했어요.", "error");
+      console.error("글 삭제 실패:", err);
+    }
+  };
+
+  // 🗑️ 라운지 댓글 삭제 (댓글 작성자 본인만)
+  const handleDeleteComment = async (post, comment) => {
+    if (!user || !post || !comment) return;
+    if (comment.userId !== user.uid) { showToast("내가 쓴 댓글만 삭제할 수 있어요.", "error"); return; }
+    if (!window.confirm("이 댓글을 삭제할까요?")) return;
+    try {
+      const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', post.id);
+      const updatedComments = (post.comments || []).filter(c => c.id !== comment.id);
+      await updateDoc(postRef, { comments: updatedComments });
+      if (selectedDetailNote && selectedDetailNote.id === post.id) {
+        setSelectedDetailNote(prev => ({ ...prev, comments: updatedComments }));
+      }
+      showToast("댓글이 삭제되었습니다.", "success");
+    } catch (err) {
+      showToast("댓글 삭제 중 오류가 발생했어요.", "error");
+      console.error("댓글 삭제 실패:", err);
+    }
+  };
+
+  // 🗑️ 내 개인 테이스팅 노트 삭제
+  const handleDeleteMyNote = async (note) => {
+    if (!user || !note) return;
+    if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없어요.")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', note.id));
+      if (selectedDetailNote && selectedDetailNote.id === note.id) setSelectedDetailNote(null);
+      showToast("노트가 삭제되었습니다.", "success");
+    } catch (err) {
+      showToast("삭제 중 오류가 발생했어요.", "error");
+      console.error("노트 삭제 실패:", err);
+    }
+  };
+
   const handleAddComment = async (postId) => {
     if (!user || !commentInputs[postId]?.trim()) return;
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
@@ -2373,7 +2422,10 @@ export default function TastingApp() {
                 </span>
                 <h3 className="font-black text-xl text-gray-900 mt-1 leading-tight">{selectedDetailNote.analysisResult?.name}</h3>
               </div>
-              <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><Icon name="X" className="w-5 h-5 text-gray-500" /></button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button onClick={() => handleDeleteMyNote(selectedDetailNote)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded-full transition-colors" title="노트 삭제"><Icon name="Trash" className="w-5 h-5 text-red-500" /></button>
+                <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"><Icon name="X" className="w-5 h-5 text-gray-500" /></button>
+              </div>
             </div>
 
             <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-3">
@@ -2457,9 +2509,16 @@ export default function TastingApp() {
               <div className="flex items-center gap-2">
                 <span className="text-xs font-black text-gray-400">보틀 라운지 상세보기</span>
               </div>
-              <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors">
-                <Icon name="X" className="w-4 h-4 text-gray-500" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                {selectedDetailNote.userId === user?.uid && (
+                  <button onClick={() => handleDeletePost(selectedDetailNote)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded-full transition-colors" title="글 삭제">
+                    <Icon name="Trash" className="w-4 h-4 text-red-500" />
+                  </button>
+                )}
+                <button onClick={() => setSelectedDetailNote(null)} className="p-1.5 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors">
+                  <Icon name="X" className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
             </div>
 
             <div className="p-4 space-y-4">
@@ -2557,7 +2616,10 @@ export default function TastingApp() {
                               <span className="text-[9px] text-gray-400 font-medium ml-auto shrink-0">{formatTimeAgo(c.createdAt)}</span>
                             </div>
                             <p className="text-gray-600 font-medium mt-1 pl-0.5">{c.text}</p>
-                            <div className="text-right">
+                            <div className="text-right flex items-center justify-end gap-2">
+                              {c.userId === user?.uid && (
+                                <button onClick={() => handleDeleteComment(selectedDetailNote, c)} className="text-[10px] font-bold text-red-400 hover:text-red-600 hover:underline mt-1">🗑 삭제</button>
+                              )}
                               <button onClick={() => setActiveReplyBox(activeReplyBox === c.id ? null : c.id)} className="text-[10px] font-bold text-indigo-600 hover:underline mt-1">
                                 {activeReplyBox === c.id ? '취소' : '↳ 답글 달기'}
                               </button>
