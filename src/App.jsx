@@ -1045,7 +1045,7 @@ export default function TastingApp() {
             userId: user.uid,
             userName: userProfile.nickname,
             totalCommunityScore: 0,
-            ratings: { [user.uid]: overallRating },
+            ratings: {}, // 🐛 [버그수정] 별점(0~5) 칸은 비워서 시작. 작성자 종합평가는 overallRating 필드에 따로 보관됨
             originalRatings: ratings,
             comments: [],
             isVerified: true,
@@ -1130,11 +1130,19 @@ export default function TastingApp() {
 
   const handleRatePost = async (postId, currentRatings, score) => {
     if (!user) return;
+    // 🐛 [버그수정] 작성자 본인은 자기 보틀에 별점을 줄 수 없음 (단위 다른 점수 섞임 방지)
+    const targetPost = communityPosts.find(p => p.id === postId);
+    if (targetPost && targetPost.userId === user.uid) {
+      showToast("내 보틀에는 별점을 줄 수 없어요. 다른 분들의 평가를 받아보세요!", "info");
+      return;
+    }
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
     try {
       const updatedRatings = { ...(currentRatings || {}) };
       updatedRatings[user.uid] = score;
-      const totalScore = Object.values(updatedRatings).reduce((acc, curr) => acc + curr, 0);
+      // 합산 시 작성자 본인 점수(과거 데이터에 섞여있을 수 있음)는 제외
+      const authorId = targetPost?.userId;
+      const totalScore = Object.entries(updatedRatings).reduce((acc, [uid, val]) => (uid === authorId ? acc : acc + (Number(val) || 0)), 0);
       await updateDoc(postRef, { ratings: updatedRatings, totalCommunityScore: totalScore });
 
       if (selectedDetailNote && selectedDetailNote.id === postId) {
@@ -1677,6 +1685,7 @@ export default function TastingApp() {
               .map((post, index) => {
                 const rankingAuthorStats = userStats[post.userId] || { badge: '🥚 알콜 입문자', isTop: false, rank: '-' };
                 const myRating = post.ratings?.[user?.uid] || 0;
+                const isAuthor = post.userId === user?.uid; // 🐛 작성자 본인 여부
                 const conf = LIQUOR_CONFIG[post.liquorType] || LIQUOR_CONFIG.wine;
                 const hasCommented = post.comments?.some(c => c.userId === user?.uid);
                 const isRatingLocked = myRating > 0 && hasCommented;
@@ -1762,7 +1771,9 @@ export default function TastingApp() {
                           <p className="text-[10px] font-black text-gray-500 tracking-tight">부러움 점수 평가</p>
                           <p className="text-[9px] text-indigo-500 font-bold truncate">댓글 작성 시 점수 자동 고정!</p>
                         </div>
-                        {isRatingLocked ? (
+                        {isAuthor ? (
+                          <div className="bg-gray-50 border border-gray-200 text-gray-500 font-black text-[11px] px-2.5 py-1.5 rounded-xl shadow-sm whitespace-nowrap">🍷 내 보틀</div>
+                        ) : isRatingLocked ? (
                           <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[11px] px-2.5 py-1.5 rounded-xl shadow-sm whitespace-nowrap">🔒 평가 완료 ({myRating.toFixed(1)}점)</div>
                         ) : (
                           <div className="shrink-0" onTouchMove={(e) => { if (!e.touches[0]) return; const rect = e.currentTarget.getBoundingClientRect(); const x = e.touches[0].clientX - rect.left; const percent = Math.min(Math.max(x / rect.width, 0), 1); const calculated = Math.round(percent * 5 * 2) / 2; handleRatePost(post.id, post.ratings, calculated); }}>
@@ -2202,7 +2213,9 @@ export default function TastingApp() {
                   <div className="min-w-0 flex-1">
                     <p className="text-[10px] font-black text-gray-500 tracking-tight">부러움 점수 드래그 평가</p>
                   </div>
-                  {selectedDetailNote.ratings?.[user?.uid] > 0 && selectedDetailNote.comments?.some(c => c.userId === user?.uid) ? (
+                  {selectedDetailNote.userId === user?.uid ? (
+                    <div className="bg-gray-100 border border-gray-200 text-gray-500 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-sm whitespace-nowrap">🍷 내 보틀</div>
+                  ) : selectedDetailNote.ratings?.[user?.uid] > 0 && selectedDetailNote.comments?.some(c => c.userId === user?.uid) ? (
                     <div className="bg-amber-50 border border-amber-200 text-amber-800 font-black text-[10px] px-2.5 py-1 rounded-xl shadow-sm whitespace-nowrap">
                       🔒 평가 완료 ({(selectedDetailNote.ratings?.[user?.uid] || 0).toFixed(1)}점)
                     </div>
