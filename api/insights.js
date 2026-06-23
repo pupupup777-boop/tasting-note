@@ -34,6 +34,8 @@ export default async function handler(req, res) {
       `선호하는 스타일·품종·맛의 경향을 짚어주고, '${cat}' 취향 안에서 다음에 시도하면 좋을 만한 것도 한두 개 제안하세요. 과장 없이 친근하고 구체적으로.`;
   }
 
+  instruction += ` 그리고 recommendations 항목에는, 위 방향에 어울리는 '${cat}'의 '실제로 존재하는' 대표 제품을 가격대 3구간(low 1~10만원 / mid 10~30만원 / high 30만원 이상)별로 각각 최대 3개씩 제안하세요. 각 제품마다 사용자의 취향과 어떻게 연결되는지 한 줄 이유(note)를 붙이고, 해당 가격대에 마땅한 실제 제품이 없으면 그 구간은 비워두세요(억지로 지어내지 말 것).`;
+
   const payload = {
     contents: [{
       role: 'user',
@@ -57,9 +59,22 @@ export default async function handler(req, res) {
               },
               required: ['label', 'desc']
             }
+          },
+          recommendations: {
+            type: 'ARRAY',
+            description: `위 분석/추천 방향에 맞는 '${cat}'의 실제 대표 제품을, 가격대 3구간(low: 1~10만원, mid: 10~30만원, high: 30만원 이상)별로 각각 최대 3개씩 추천. 해당 가격대에 마땅한 실제 제품이 없으면 그 구간은 빈 배열로 두고 억지로 채우지 말 것. 실제로 존재하는 유명한 제품명만 사용.`,
+            items: {
+              type: 'OBJECT',
+              properties: {
+                tier: { type: 'STRING', enum: ['low', 'mid', 'high'], description: 'low=1~10만원, mid=10~30만원, high=30만원+' },
+                name: { type: 'STRING', description: '실제 제품명 (예: "Kistler Chardonnay Les Noisetiers")' },
+                note: { type: 'STRING', description: '한 줄 추천 이유 (사용자 취향과의 연결)' }
+              },
+              required: ['tier', 'name', 'note']
+            }
           }
         },
-        required: ['title', 'body', 'items']
+        required: ['title', 'body', 'items', 'recommendations']
       }
     }
   };

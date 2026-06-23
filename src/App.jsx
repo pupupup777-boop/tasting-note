@@ -468,6 +468,7 @@ export default function TastingApp() {
   const [insightResult, setInsightResult] = useState(null);   // { mode, liquorType, title, body, items }
   const [insightLoading, setInsightLoading] = useState('');    // '' | 'taste' | 'recommend'
   const [insightPickMode, setInsightPickMode] = useState('');  // '' | 'taste' | 'recommend' : 주종 선택 대기 중인 모드
+  const [insightTier, setInsightTier] = useState('low');       // 추천 와인 가격대 필터: 'low' | 'mid' | 'high'
   const [usageInfo, setUsageInfo] = useState(null);            // Firestore usage 문서 캐시
 
   const fileInputRef = useRef(null);
@@ -970,6 +971,7 @@ export default function TastingApp() {
       }
       const parsed = await res.json();
       setInsightResult({ mode, liquorType, liquorName, ...parsed });
+      setInsightTier('low');
 
       const now = Date.now();
       await setDoc(ref, { [field]: now }, { merge: true });
@@ -1737,6 +1739,41 @@ export default function TastingApp() {
                 </div>
               ))}
             </div>
+
+            {/* 가격대별 추천 와인 */}
+            {Array.isArray(insightResult.recommendations) && insightResult.recommendations.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs font-black text-gray-700 mb-2.5">💰 가격대별 추천 {insightResult.liquorName || ''}</p>
+                <div className="flex gap-2 mb-3">
+                  {[['low', '1~10만'], ['mid', '10~30만'], ['high', '30만+']].map(([tier, label]) => {
+                    const count = insightResult.recommendations.filter(r => r.tier === tier).length;
+                    const active = insightTier === tier;
+                    return (
+                      <button
+                        key={tier}
+                        onClick={() => setInsightTier(tier)}
+                        className={`flex-1 py-2 rounded-xl text-[11px] font-black border transition-all ${active ? 'bg-gray-900 text-white border-gray-900 shadow-sm' : 'bg-white text-gray-500 border-gray-200'}`}
+                      >
+                        {label}<span className="opacity-60 ml-1 font-mono">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="space-y-2">
+                  {insightResult.recommendations.filter(r => r.tier === insightTier).length === 0 ? (
+                    <p className="text-center text-[11px] text-gray-400 font-medium py-3 bg-gray-50 rounded-xl">이 가격대는 마땅한 추천이 없어요</p>
+                  ) : (
+                    insightResult.recommendations.filter(r => r.tier === insightTier).map((r, i) => (
+                      <div key={i} className="bg-amber-50/60 border border-amber-100 p-3 rounded-xl">
+                        <p className="text-sm font-black text-gray-800">🍾 {r.name}</p>
+                        <p className="text-[11px] text-gray-500 font-medium leading-relaxed mt-0.5">{r.note}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <p className="text-[9px] text-gray-300 font-medium mt-2 text-center">AI 추천이라 실제 가격·정보는 다를 수 있어요</p>
+              </div>
+            )}
           </div>
         )}
       </div>
