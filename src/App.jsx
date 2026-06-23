@@ -553,7 +553,10 @@ export default function TastingApp() {
     initAuth();
 
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) setUser(currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+        if (!currentUser.isAnonymous) console.log("내 UID:", currentUser.uid); // 👤 관리자 설정용 (확인 후 제거 예정)
+      }
     });
     return () => unsubscribe();
   }, []);
