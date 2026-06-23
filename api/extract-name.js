@@ -37,31 +37,46 @@ export default async function handler(req, res) {
     }
   };
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+  const maxRetries = 4;
+  let delay = 800;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      if ((response.status === 503 || response.status === 429) && i < maxRetries - 1) {
+        await new Promise(r => setTimeout(r, delay));
+        delay = Math.min(delay * 2, 3000);
+        continue;
       }
-    );
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      return res.status(response.status).json({ error: `Gemini error: ${response.status}`, detail: errorText });
+      if (!response.ok) {
+        const errorText = await response.text();
+        return res.status(response.status).json({ error: `Gemini error: ${response.status}`, detail: errorText });
+      }
+
+      const result = await response.json();
+      const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!rawText) {
+        return res.status(502).json({ error: 'Empty response from Gemini' });
+      }
+
+      const parsed = JSON.parse(rawText);
+      return res.status(200).json({ name: parsed.name || '' });
+    } catch (err) {
+      if (i === maxRetries - 1) {
+        // 이름 추출이 실패해도 앱은 상세분석으로 자연스럽게 넘어감
+        return res.status(500).json({ error: 'Extract failed', detail: String(err) });
+      }
+      await new Promise(r => setTimeout(r, delay));
+      delay = Math.min(delay * 2, 3000);
     }
-
-    const result = await response.json();
-    const rawText = result?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) {
-      return res.status(502).json({ error: 'Empty response from Gemini' });
-    }
-
-    const parsed = JSON.parse(rawText);
-    return res.status(200).json({ name: parsed.name || '' });
-  } catch (err) {
-    // 이름 추출이 실패해도 앱은 상세분석으로 자연스럽게 넘어가도록 에러만 반환
-    return res.status(500).json({ error: 'Extract failed', detail: String(err) });
   }
 }

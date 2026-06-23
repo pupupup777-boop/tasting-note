@@ -45,8 +45,8 @@ export default async function handler(req, res) {
     }
   };
 
-  const maxRetries = 4;
-  let delay = 1000;
+  const maxRetries = 6;
+  let delay = 800;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -62,7 +62,7 @@ export default async function handler(req, res) {
       // 503(일시 과부하) 또는 429(한도)면 잠시 후 재시도
       if ((response.status === 503 || response.status === 429) && i < maxRetries - 1) {
         await new Promise(r => setTimeout(r, delay));
-        delay *= 2;
+        delay = Math.min(delay * 2, 3000);
         continue;
       }
 
@@ -86,7 +86,7 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Analyze-name failed', detail: String(err) });
       }
       await new Promise(r => setTimeout(r, delay));
-      delay *= 2;
+      delay = Math.min(delay * 2, 3000);
     }
   }
 }
