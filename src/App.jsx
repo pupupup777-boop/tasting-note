@@ -176,6 +176,17 @@ const Icon = ({ name, className = "w-5 h-5" }) => {
 
 const formatTimeAgo = (timestamp) => { if (!timestamp) return ''; const diff = Date.now() - timestamp; const seconds = Math.floor(diff / 1000); if (seconds < 60) return '방금 전'; const minutes = Math.floor(seconds / 60); if (minutes < 60) return `${minutes}분 전`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours}시간 전`; const days = Math.floor(hours / 24); if (days < 7) return `${days}일 전`; const date = new Date(timestamp); return `${date.getFullYear()}. ${date.getMonth() + 1}. ${date.getDate()}.`; };
 
+// 🔑 [캐싱] 와인 이름을 공용 카탈로그 조회용 키로 정규화 (대소문자/공백/특수문자 정리 → 매칭률 ↑, Firestore 문서ID 안전)
+const normalizeWineName = (name) => {
+  if (!name) return '';
+  return String(name)
+    .toLowerCase()
+    .replace(/\s+/g, '')          // 공백 제거
+    .replace(/[\/\\#?%.]/g, '')   // Firestore 문서ID에 위험한 문자 제거
+    .trim()
+    .slice(0, 300);               // 키 길이 안전장치
+};
+
 const compressImage = (base64Str, maxWidth = 400) => {
   return new Promise((resolve) => {
     let img = new Image();
@@ -869,11 +880,55 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     const base64Data = base64Image.split(',')[1];
-
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
     try {
-      // 키를 들고 구글을 부르는 건 서버(/api/analyze)가 한다. 브라우저는 이미지 데이터만 보낸다.
+      // ─────────────────────────────────────────────
+      // 1단계: 사진에서 "이름"만 가볍게 추출 (싼 호출)
+      // ─────────────────────────────────────────────
+      let extractedName = '';
+      try {
+        const nameRes = await fetch('/api/extract-name', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Data })
+        });
+        if (nameRes.ok) {
+          const nameJson = await nameRes.json();
+          extractedName = nameJson.name || '';
+        }
+      } catch (e) {
+        console.error("이름 추출 실패(상세분석으로 진행):", e);
+      }
+
+      // ─────────────────────────────────────────────
+      // 2단계: 공용 카탈로그에서 이름으로 조회 → 있으면 상세분석 스킵 (AI 절약)
+      // ─────────────────────────────────────────────
+      const lookupKey = normalizeWineName(extractedName);
+      if (lookupKey) {
+        try {
+          const { getDoc } = await import('firebase/firestore');
+          const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', lookupKey);
+          const snap = await getDoc(catalogRef);
+          if (snap.exists()) {
+            const cached = snap.data();
+            // 주종이 다르면(예: 위스키인데 와인탭) 자동 보정
+            if (cached.detectedCategory && LIQUOR_CONFIG[cached.detectedCategory] && cached.detectedCategory !== selectedLiquorType) {
+              setSelectedLiquorType(cached.detectedCategory);
+            }
+            setAnalysisResult(cached);
+            showToast("이미 등록된 와인이라 정보를 바로 불러왔어요! (AI 절약 ✨)", "success");
+            setIsAnalyzing(false);
+            return; // 🎯 비싼 상세분석 스킵
+          }
+        } catch (e) {
+          console.error("카탈로그 조회 실패(상세분석으로 진행):", e);
+        }
+      }
+
+      // ─────────────────────────────────────────────
+      // 3단계: 카탈로그에 없으면 상세분석 (기존 비싼 호출) + 카탈로그에 저장
+      // ─────────────────────────────────────────────
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -894,7 +949,6 @@ export default function TastingApp() {
       }
 
       const parsed = await response.json();
-      setAnalysisResult(parsed);
 
       if (parsed.detectedCategory && parsed.detectedCategory !== selectedLiquorType) {
         if (LIQUOR_CONFIG[parsed.detectedCategory]) {
@@ -902,11 +956,33 @@ export default function TastingApp() {
           showToast(`주종을 정확히 감지하여 자동으로 '${LIQUOR_CONFIG[parsed.detectedCategory].name}' 탭으로 변경했습니다!`, 'success');
         }
       }
-      // [와인 세부 변환 시스템] 라벨에서 '레드'/'화이트' 키워드 검출 시 하위 아로마/지표 레이아웃 자동 변환
+      // [와인 세부 변환] 라벨에서 '레드'/'화이트' 키워드 검출 시 스타일 지정
       if (parsed.detectedCategory === 'wine' || selectedLiquorType === 'wine') {
         const isWhite = parsed.type?.toLowerCase().includes('white') || parsed.name?.toLowerCase().includes('white') || parsed.grape?.toLowerCase().includes('chardonnay') || parsed.type?.includes('화이트') || parsed.type?.includes('샴페인');
         parsed.wineStyle = isWhite ? 'white' : 'red';
-        setAnalysisResult(parsed);
+      }
+      setAnalysisResult(parsed);
+
+      // 🗂️ 공용 카탈로그에 저장 → 다음 사람은 이 와인을 AI 상세분석 없이 가져감
+      const saveKey = normalizeWineName(parsed.name);
+      if (saveKey) {
+        try {
+          const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
+          await setDoc(catalogRef, {
+            name: parsed.name || '',
+            type: parsed.type || '',
+            region: parsed.region || '',
+            vintage: parsed.vintage || '',
+            grape: parsed.grape || '',
+            producer: parsed.producer || '',
+            detectedCategory: parsed.detectedCategory || selectedLiquorType,
+            wineStyle: parsed.wineStyle || null,
+            createdAt: Date.now(),
+            firstBy: user.uid
+          }, { merge: true });
+        } catch (e) {
+          console.error("카탈로그 저장 실패:", e);
+        }
       }
 
       if (shareToCommunity) {
