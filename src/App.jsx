@@ -902,15 +902,15 @@ export default function TastingApp() {
   };
 
   // 라벨분석 일일 한도 체크 + 카운트(+1). true면 진행 허용, false면 한도초과
+  // 관리자도 카운트는 쌓되(모니터링용) 한도로 막지는 않음
   const checkAndCountLabel = async () => {
-    if (isAdmin) return true; // 👑 관리자는 무제한
     try {
       const ref = usageDocRef();
       const snap = await getDoc(ref);
       const data = snap.exists() ? snap.data() : {};
       const today = getTodayStr();
       const count = (data.labelDate === today) ? (data.labelCount || 0) : 0;
-      if (count >= DAILY_LABEL_LIMIT) return false;
+      if (!isAdmin && count >= DAILY_LABEL_LIMIT) return false; // 👑 관리자는 막지 않음
       await setDoc(ref, { labelDate: today, labelCount: count + 1 }, { merge: true });
       setUsageInfo(prev => ({ ...(prev || {}), labelDate: today, labelCount: count + 1 }));
       return true;
@@ -991,9 +991,9 @@ export default function TastingApp() {
     }
   };
 
-  // 취향분석 화면 진입 시 사용량(쿨다운/일일카운트) 불러오기
+  // 취향분석/추가하기 화면 진입 시 사용량(쿨다운/일일카운트) 불러오기
   useEffect(() => {
-    if (currentView === 'insights' && user && !user.isAnonymous) {
+    if ((currentView === 'insights' || currentView === 'add') && user && !user.isAnonymous) {
       fetchUsage();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1491,6 +1491,19 @@ export default function TastingApp() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
 
+          {user && !user.isAnonymous && (
+            <div className="flex items-center justify-between mb-3 px-1">
+              <span className="text-[11px] font-black text-gray-500">📸 오늘의 라벨 분석</span>
+              {(() => {
+                const today = getTodayStr();
+                const used = usageInfo?.labelDate === today ? (usageInfo?.labelCount || 0) : 0;
+                if (isAdmin) return <span className="text-[11px] font-black text-amber-600 font-mono">👑 {used}회 사용 · 무제한</span>;
+                const left = Math.max(0, DAILY_LABEL_LIMIT - used);
+                return <span className={`text-[11px] font-black font-mono ${left === 0 ? 'text-red-500' : 'text-gray-700'}`}>{left}/{DAILY_LABEL_LIMIT}장 남음</span>;
+              })()}
+            </div>
+          )}
+
           {!image ? (
             <div onClick={triggerFileInput} className={`border-2 border-dashed ${theme.border} rounded-xl p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors group flex flex-col items-center justify-center h-48 bg-gray-50/50`}>
               <Icon name="Camera" className={`w-12 h-12 ${theme.text} opacity-50 mb-3`} />
@@ -1710,7 +1723,7 @@ export default function TastingApp() {
             <h2 className="text-lg font-black">나의 취향 분석</h2>
           </div>
           <p className="text-gray-500 text-xs font-medium">지금까지 <b className="text-gray-800">{safeNotes.length}병</b>을 기록하셨어요. AI가 당신이 매긴 점수와 취향을 분석해드려요.</p>
-          <p className="text-[10px] text-gray-400 mt-1.5 font-mono">{isAdmin ? '👑 관리자 · 무제한 이용' : `오늘 라벨분석 ${usedToday}/${DAILY_LABEL_LIMIT} · 취향분석은 5일에 1번`}</p>
+          <p className="text-[10px] text-gray-400 mt-1.5 font-mono">{isAdmin ? `👑 무제한 · 오늘 라벨 ${usedToday}회 사용` : `오늘 라벨분석 ${usedToday}/${DAILY_LABEL_LIMIT} · 취향분석은 5일에 1번`}</p>
         </div>
 
         {/* B: 내 취향 총평 / C: 취향 밖 추천 버튼 → 누르면 주종 선택 */}
