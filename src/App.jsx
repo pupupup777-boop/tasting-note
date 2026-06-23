@@ -7,7 +7,7 @@ const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "";
 
 const fallbackConfig = {
   apiKey: FIREBASE_API_KEY,
-  authDomain: "chill-sip.firebaseapp.com",
+  authDomain: "tasting-note-six.vercel.app", // 🔑 [사파리 로그인 수정] 앱과 같은 도메인으로 인증 처리 (vercel.json이 /__/auth/* 를 firebase로 프록시)
   projectId: "chill-sip",
   storageBucket: "chill-sip.firebasestorage.app",
   messagingSenderId: "597973066423",
