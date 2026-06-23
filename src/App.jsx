@@ -555,7 +555,6 @@ export default function TastingApp() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (currentUser) {
         setUser(currentUser);
-        if (!currentUser.isAnonymous) console.log("내 UID:", currentUser.uid); // 👤 관리자 설정용 (확인 후 제거 예정)
       }
     });
     return () => unsubscribe();
@@ -885,6 +884,8 @@ export default function TastingApp() {
   // ═══════════════════════════════════════════════
   const DAILY_LABEL_LIMIT = 5;
   const INSIGHT_COOLDOWN_MS = 5 * 24 * 60 * 60 * 1000; // 5일
+  const ADMIN_UIDS = ['27zSkaf4TcOO6Xav29dZhXKY5o22']; // 👑 무제한 사용 계정(관리자)
+  const isAdmin = !!user && ADMIN_UIDS.includes(user.uid);
 
   const usageDocRef = () => doc(db, 'artifacts', appId, 'users', user.uid, 'meta', 'usage');
   const getTodayStr = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
@@ -901,6 +902,7 @@ export default function TastingApp() {
 
   // 라벨분석 일일 한도 체크 + 카운트(+1). true면 진행 허용, false면 한도초과
   const checkAndCountLabel = async () => {
+    if (isAdmin) return true; // 👑 관리자는 무제한
     try {
       const ref = usageDocRef();
       const snap = await getDoc(ref);
@@ -933,7 +935,7 @@ export default function TastingApp() {
     const field = mode === 'recommend' ? 'lastRecommendAt' : 'lastTasteAt';
     const last = data[field] || 0;
     const elapsed = Date.now() - last;
-    if (elapsed < INSIGHT_COOLDOWN_MS) {
+    if (!isAdmin && elapsed < INSIGHT_COOLDOWN_MS) { // 👑 관리자는 쿨다운 무시
       const daysLeft = Math.ceil((INSIGHT_COOLDOWN_MS - elapsed) / (24 * 60 * 60 * 1000));
       showToast(`이 분석은 5일에 한 번만 가능해요. ${daysLeft}일 후에 다시 받아보세요!`, 'info');
       return;
@@ -1659,32 +1661,32 @@ export default function TastingApp() {
             <h2 className="text-lg font-black">나의 취향 분석</h2>
           </div>
           <p className="text-gray-500 text-xs font-medium">지금까지 <b className="text-gray-800">{safeNotes.length}병</b>을 기록하셨어요. AI가 당신이 매긴 점수와 취향을 분석해드려요.</p>
-          <p className="text-[10px] text-gray-400 mt-1.5 font-mono">오늘 라벨분석 {usedToday}/{DAILY_LABEL_LIMIT} · 취향분석은 5일에 1번</p>
+          <p className="text-[10px] text-gray-400 mt-1.5 font-mono">{isAdmin ? '👑 관리자 · 무제한 이용' : `오늘 라벨분석 ${usedToday}/${DAILY_LABEL_LIMIT} · 취향분석은 5일에 1번`}</p>
         </div>
 
         {/* B: 내 취향 총평 / C: 취향 밖 추천 버튼 → 누르면 주종 선택 */}
         <div className="grid grid-cols-2 gap-3">
           <button
             onClick={() => setInsightPickMode(insightPickMode === 'taste' ? '' : 'taste')}
-            disabled={insightLoading !== '' || noNotes || tasteCd > 0}
-            className={`p-4 rounded-2xl border text-left transition-all ${insightLoading !== '' || noNotes || tasteCd > 0 ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : insightPickMode === 'taste' ? 'bg-rose-700 border-rose-800 text-white shadow-lg ring-2 ring-rose-300' : 'bg-gradient-to-br from-rose-500 to-rose-700 border-rose-700 text-white shadow-md active:scale-95'}`}
+            disabled={insightLoading !== '' || noNotes || (!isAdmin && tasteCd > 0)}
+            className={`p-4 rounded-2xl border text-left transition-all ${insightLoading !== '' || noNotes || (!isAdmin && tasteCd > 0) ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : insightPickMode === 'taste' ? 'bg-rose-700 border-rose-800 text-white shadow-lg ring-2 ring-rose-300' : 'bg-gradient-to-br from-rose-500 to-rose-700 border-rose-700 text-white shadow-md active:scale-95'}`}
           >
             <div className="text-lg mb-0.5">🍷</div>
             <div className="font-black text-sm">내 취향 총평</div>
-            <div className={`text-[10px] mt-0.5 font-bold ${insightLoading !== '' || noNotes || tasteCd > 0 ? 'text-gray-400' : 'text-rose-100'}`}>
-              {insightLoading === 'taste' ? '분석 중...' : tasteCd > 0 ? `${tasteCd}일 후 가능` : insightPickMode === 'taste' ? '주종을 골라주세요 ↓' : '지금까지의 취향 해석'}
+            <div className={`text-[10px] mt-0.5 font-bold ${insightLoading !== '' || noNotes || (!isAdmin && tasteCd > 0) ? 'text-gray-400' : 'text-rose-100'}`}>
+              {insightLoading === 'taste' ? '분석 중...' : (!isAdmin && tasteCd > 0) ? `${tasteCd}일 후 가능` : insightPickMode === 'taste' ? '주종을 골라주세요 ↓' : '지금까지의 취향 해석'}
             </div>
           </button>
 
           <button
             onClick={() => setInsightPickMode(insightPickMode === 'recommend' ? '' : 'recommend')}
-            disabled={insightLoading !== '' || noNotes || recCd > 0}
-            className={`p-4 rounded-2xl border text-left transition-all ${insightLoading !== '' || noNotes || recCd > 0 ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : insightPickMode === 'recommend' ? 'bg-purple-700 border-purple-800 text-white shadow-lg ring-2 ring-purple-300' : 'bg-gradient-to-br from-indigo-500 to-purple-700 border-purple-700 text-white shadow-md active:scale-95'}`}
+            disabled={insightLoading !== '' || noNotes || (!isAdmin && recCd > 0)}
+            className={`p-4 rounded-2xl border text-left transition-all ${insightLoading !== '' || noNotes || (!isAdmin && recCd > 0) ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : insightPickMode === 'recommend' ? 'bg-purple-700 border-purple-800 text-white shadow-lg ring-2 ring-purple-300' : 'bg-gradient-to-br from-indigo-500 to-purple-700 border-purple-700 text-white shadow-md active:scale-95'}`}
           >
             <div className="text-lg mb-0.5">🧭</div>
             <div className="font-black text-sm">취향 밖 추천</div>
-            <div className={`text-[10px] mt-0.5 font-bold ${insightLoading !== '' || noNotes || recCd > 0 ? 'text-gray-400' : 'text-indigo-100'}`}>
-              {insightLoading === 'recommend' ? '분석 중...' : recCd > 0 ? `${recCd}일 후 가능` : insightPickMode === 'recommend' ? '주종을 골라주세요 ↓' : '안 마셔본 다른 스타일'}
+            <div className={`text-[10px] mt-0.5 font-bold ${insightLoading !== '' || noNotes || (!isAdmin && recCd > 0) ? 'text-gray-400' : 'text-indigo-100'}`}>
+              {insightLoading === 'recommend' ? '분석 중...' : (!isAdmin && recCd > 0) ? `${recCd}일 후 가능` : insightPickMode === 'recommend' ? '주종을 골라주세요 ↓' : '안 마셔본 다른 스타일'}
             </div>
           </button>
         </div>
