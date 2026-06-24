@@ -429,6 +429,7 @@ export default function TastingApp() {
   const [communityFilter, setCommunityFilter] = useState('all');
   const [communitySort, setCommunitySort] = useState('latest');
   const [shareToCommunity, setShareToCommunity] = useState(false);
+  const [showShareConfirm, setShowShareConfirm] = useState(false); // 저장 시 라운지 공유 여부 묻는 팝업
   const [verificationCode, setVerificationCode] = useState('');
   const [commentInputs, setCommentInputs] = useState({});
   const [pendingRatings, setPendingRatings] = useState({}); // 🎚️ 드래그로 골라둔(아직 미확정) 별점. 댓글 작성 시 확정됨
@@ -869,7 +870,7 @@ export default function TastingApp() {
 
     const reader = new FileReader();
     reader.onloadend = async () => {
-      const compressed = await compressImage(reader.result, 400);
+      const compressed = await compressImage(reader.result, 700);
       setImage(compressed);
       analyzeLabel(compressed);
     };
@@ -1156,6 +1157,7 @@ export default function TastingApp() {
 
   // 🔤 사진 대신 "이름"으로 정보 찾기 (사진 분석과 동일한 캐시/한도/카탈로그 규칙)
   const analyzeByName = async () => {
+    if (isAnalyzing) return; // 중복 호출 방지 (엔터+클릭 겹침/연타)
     const q = (nameQuery || '').trim();
     if (!q) { showToast("제품 이름을 입력해 주세요.", "info"); return; }
     if (!user || user.isAnonymous) { showToast("AI 검색은 구글 로그인 후 이용할 수 있어요!", "error"); return; }
@@ -1260,7 +1262,7 @@ export default function TastingApp() {
     }
   };
 
-  const handleSaveNote = async () => {
+  const handleSaveNote = async (shouldShare = false) => {
     if (!analysisResult) {
       showToast("라벨 분석이 아직 완료되지 않았습니다.", "error");
       return;
@@ -1270,6 +1272,7 @@ export default function TastingApp() {
       return;
     }
     setIsSaving(true);
+    setShowShareConfirm(false);
     try {
       const smallImage = image ? await compressImage(image, 300) : null;
 
@@ -1296,8 +1299,8 @@ export default function TastingApp() {
         const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
         await addDoc(notesRef, newNote);
 
-        // 커뮤니티 공유 체크 시 라운지 공용 컬렉션에도 동시 등록
-        if (shareToCommunity) {
+        // 라운지 공유 선택 시 공용 컬렉션에도 동시 등록
+        if (shouldShare) {
           const communityRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
           await addDoc(communityRef, {
             ...newNote,
@@ -1581,7 +1584,7 @@ export default function TastingApp() {
         )}
 
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
 
           {user && !user.isAnonymous && (
             <div className="flex items-center justify-between mb-3 px-1">
@@ -1800,22 +1803,11 @@ export default function TastingApp() {
             />
           </div>
 
-          <div className="flex gap-2 items-center pt-2">
-            {/* 저장 버튼 옆으로 깔끔하게 이동한 라운지 공유 토글 스위치 */}
-            <label className="flex flex-col items-center justify-center bg-white border border-gray-200 px-3 py-2 rounded-xl shadow-sm cursor-pointer select-none active:scale-95 transition-all shrink-0 h-14 min-w-[75px]">
-              <span className="text-[9px] font-black text-gray-400 mb-1">라운지공유</span>
-              <input
-                type="checkbox"
-                checked={shareToCommunity}
-                onChange={(e) => setShareToCommunity(e.target.checked)}
-                className="w-4 h-4 accent-rose-800 rounded border-gray-300 cursor-pointer"
-              />
-            </label>
-
+          <div className="pt-2">
             <button
-              onClick={handleSaveNote}
+              onClick={() => { if (editingNoteId) { handleSaveNote(false); } else { setShowShareConfirm(true); } }}
               disabled={isSaving || !overallRating}
-              className={`flex-1 font-black text-sm h-14 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 ${isSaving || !overallRating ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 hover:bg-black text-white active:scale-95'}`}
+              className={`w-full font-black text-sm h-14 rounded-xl shadow-md transition-all flex items-center justify-center gap-2 ${isSaving || !overallRating ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-900 hover:bg-black text-white active:scale-95'}`}
             >
               {isSaving && <Icon name="Loader2" className="animate-spin w-4 h-4" />}
               {editingNoteId ? "테이스팅 노트 수정완료" : "테이스팅 노트 저장하기"}
@@ -2519,6 +2511,34 @@ export default function TastingApp() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 저장 시 라운지 공유 여부 확인 팝업 */}
+      {showShareConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-5 animate-in fade-in duration-200" onClick={() => setShowShareConfirm(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-xs p-6 shadow-2xl text-center" onClick={e => e.stopPropagation()}>
+            <div className="text-4xl mb-2">🍷</div>
+            <h3 className="text-lg font-black text-gray-900 mb-1">라운지에도 공유할까요?</h3>
+            <p className="text-xs text-gray-500 font-medium mb-5 leading-relaxed">공유하면 보틀 라운지에서 다른 사람들이<br />보고 평점을 줄 수 있어요.</p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => handleSaveNote(true)}
+                disabled={isSaving}
+                className="w-full py-3 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-black text-sm active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {isSaving && <Icon name="Loader2" className="animate-spin w-4 h-4" />}
+                라운지에 공유하기
+              </button>
+              <button
+                onClick={() => handleSaveNote(false)}
+                disabled={isSaving}
+                className="w-full py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-black text-sm active:scale-95 transition-all disabled:opacity-60"
+              >
+                나만 보기 (저장만)
+              </button>
+            </div>
           </div>
         </div>
       )}
