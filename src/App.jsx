@@ -1067,10 +1067,10 @@ export default function TastingApp() {
               setSelectedLiquorType(cached.detectedCategory);
             }
             setAnalysisResult(cached);
+            setIsAnalyzing(false); // ✅ 즉시 표시
             console.log("[CACHE HIT] 카탈로그에서 불러옴 (AI 미사용):", lookupKey);
             showToast("🍷 주종을 감지했습니다!", "success");
-            await incrementLabelCount(); // ✅ 성공했으니 카운트
-            setIsAnalyzing(false);
+            incrementLabelCount(); // 백그라운드
             return; // 🎯 비싼 상세분석 스킵
           }
         } catch (e) {
@@ -1113,30 +1113,27 @@ export default function TastingApp() {
         parsed.wineStyle = isWhite ? 'white' : 'red';
       }
       setAnalysisResult(parsed);
+      setIsAnalyzing(false); // ✅ 결과 즉시 표시 (저장 작업 기다리지 않음)
       console.log("[AI ANALYZE] AI로 새로 분석함:", parsed.name);
       showToast("✨ 주종을 감지했습니다!", "success");
-      await incrementLabelCount(); // ✅ 성공했으니 카운트
+      incrementLabelCount(); // 카운트는 백그라운드로 (await 안 함)
 
-      // 🗂️ 공용 카탈로그에 저장 → 다음 사람은 이 와인을 AI 상세분석 없이 가져감
+      // 🗂️ 공용 카탈로그에 저장 (백그라운드) → 다음 사람은 AI 상세분석 없이 가져감
       const saveKey = normalizeWineName(parsed.name);
       if (saveKey) {
-        try {
-          const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
-          await setDoc(catalogRef, {
-            name: parsed.name || '',
-            type: parsed.type || '',
-            region: parsed.region || '',
-            vintage: parsed.vintage || '',
-            grape: parsed.grape || '',
-            producer: parsed.producer || '',
-            detectedCategory: parsed.detectedCategory || selectedLiquorType,
-            wineStyle: parsed.wineStyle || null,
-            createdAt: Date.now(),
-            firstBy: user.uid
-          }, { merge: true });
-        } catch (e) {
-          console.error("카탈로그 저장 실패:", e);
-        }
+        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
+        setDoc(catalogRef, {
+          name: parsed.name || '',
+          type: parsed.type || '',
+          region: parsed.region || '',
+          vintage: parsed.vintage || '',
+          grape: parsed.grape || '',
+          producer: parsed.producer || '',
+          detectedCategory: parsed.detectedCategory || selectedLiquorType,
+          wineStyle: parsed.wineStyle || null,
+          createdAt: Date.now(),
+          firstBy: user.uid
+        }, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
       }
 
       if (shareToCommunity) {
@@ -1184,11 +1181,11 @@ export default function TastingApp() {
               setSelectedLiquorType(cached.detectedCategory);
             }
             setAnalysisResult(cached);
+            setIsAnalyzing(false); // ✅ 즉시 표시
             console.log("[CACHE HIT] (이름검색):", lookupKey);
             showToast("🍷 정보를 불러왔어요!", "success");
-            await incrementLabelCount();
+            incrementLabelCount();
             setNameQuery('');
-            setIsAnalyzing(false);
             return;
           }
         } catch (e) { console.error("카탈로그 조회 실패:", e); }
@@ -1235,23 +1232,22 @@ export default function TastingApp() {
         parsed.wineStyle = isWhite ? 'white' : 'red';
       }
       setAnalysisResult(parsed);
+      setIsAnalyzing(false); // ✅ 결과 즉시 표시
       console.log("[AI ANALYZE] (이름검색):", parsed.name);
       showToast("✨ 정보를 찾았어요!", "success");
-      await incrementLabelCount();
+      incrementLabelCount();
       setNameQuery('');
 
-      // 카탈로그 저장
+      // 카탈로그 저장 (백그라운드)
       const saveKey = normalizeWineName(parsed.name || q);
       if (saveKey) {
-        try {
-          const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
-          await setDoc(catalogRef, {
-            name: parsed.name || q, type: parsed.type || '', region: parsed.region || '',
-            vintage: parsed.vintage || '', grape: parsed.grape || '', producer: parsed.producer || '',
-            detectedCategory: parsed.detectedCategory || selectedLiquorType, wineStyle: parsed.wineStyle || null,
-            createdAt: Date.now(), firstBy: user.uid
-          }, { merge: true });
-        } catch (e) { console.error("카탈로그 저장 실패:", e); }
+        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
+        setDoc(catalogRef, {
+          name: parsed.name || q, type: parsed.type || '', region: parsed.region || '',
+          vintage: parsed.vintage || '', grape: parsed.grape || '', producer: parsed.producer || '',
+          detectedCategory: parsed.detectedCategory || selectedLiquorType, wineStyle: parsed.wineStyle || null,
+          createdAt: Date.now(), firstBy: user.uid
+        }, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
       }
     } catch (err) {
       setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요.");
