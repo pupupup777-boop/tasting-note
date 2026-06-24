@@ -1293,15 +1293,16 @@ export default function TastingApp() {
       } else {
         // [신규 생성 모드] 새 도큐먼트로 추가
         const notesRef = collection(db, 'artifacts', appId, 'users', user.uid, 'notes');
-        await addDoc(notesRef, newNote);
+        const noteDocRef = await addDoc(notesRef, newNote);
 
-        // 라운지 공유 선택 시 공용 컬렉션에도 동시 등록
+        // 라운지 공유 선택 시 공용 컬렉션에도 동시 등록 + 노트에 글ID 기록(게시 상태 추적)
         if (shouldShare) {
           const communityRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
-          await addDoc(communityRef, {
+          const postDocRef = await addDoc(communityRef, {
             ...newNote,
             userId: user.uid,
             userName: userProfile.nickname,
+            ownerNoteId: noteDocRef.id,
             totalCommunityScore: 0,
             ratings: {}, // 🐛 [버그수정] 별점(0~5) 칸은 비워서 시작. 작성자 종합평가는 overallRating 필드에 따로 보관됨
             originalRatings: ratings,
@@ -1310,6 +1311,7 @@ export default function TastingApp() {
             verificationStatus: 'ai_verified',
             votes: { voters: {}, yesCount: 0, noCount: 0 }
           });
+          await updateDoc(noteDocRef, { communityPostId: postDocRef.id });
         }
         showToast("테이스팅 노트가 안전하게 저장되었습니다!", "success");
       }
@@ -1393,11 +1395,69 @@ export default function TastingApp() {
     if (!window.confirm("이 글을 삭제할까요? 달린 댓글과 평점도 함께 사라지며 되돌릴 수 없어요.")) return;
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', post.id));
+      // 연결된 내 노트가 있으면 게시 상태 해제
+      if (post.ownerNoteId) {
+        try { await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', post.ownerNoteId), { communityPostId: '' }); } catch (e) { /* 노트가 이미 없을 수 있음 */ }
+      }
       if (selectedDetailNote && selectedDetailNote.id === post.id) setSelectedDetailNote(null);
-      showToast("글이 삭제되었습니다.", "success");
+      showToast("라운지 게시가 취소되었습니다.", "success");
     } catch (err) {
       showToast("삭제 중 오류가 발생했어요.", "error");
       console.error("글 삭제 실패:", err);
+    }
+  };
+
+  // 📢 내 노트를 라운지에 게시 (미게시 → 게시)
+  const handlePublishToLounge = async (note) => {
+    if (!user || user.isAnonymous || !note) { showToast("구글 로그인 후 이용할 수 있어요!", "error"); return; }
+    if (note.communityPostId) { showToast("이미 라운지에 게시된 노트예요.", "info"); return; }
+    try {
+      const communityRef = collection(db, 'artifacts', appId, 'public', 'data', 'community_posts');
+      const postDocRef = await addDoc(communityRef, {
+        liquorType: note.liquorType,
+        analysisResult: note.analysisResult,
+        price: note.price || 0,
+        ratings: {},
+        originalRatings: note.ratings || {},
+        selectedAromas: note.selectedAromas || [],
+        personalNotes: note.personalNotes || '',
+        overallRating: note.overallRating || 0,
+        thumbnail: note.thumbnail || null,
+        createdAt: note.createdAt || Date.now(),
+        userId: user.uid,
+        userName: userProfile.nickname,
+        ownerNoteId: note.id,
+        totalCommunityScore: 0,
+        comments: [],
+        isVerified: true,
+        verificationStatus: 'ai_verified',
+        votes: { voters: {}, yesCount: 0, noCount: 0 }
+      });
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', note.id), { communityPostId: postDocRef.id });
+      if (selectedDetailNote && selectedDetailNote.id === note.id) {
+        setSelectedDetailNote(prev => ({ ...prev, communityPostId: postDocRef.id }));
+      }
+      showToast("🍷 라운지에 게시되었습니다!", "success");
+    } catch (err) {
+      showToast("게시 중 오류가 발생했어요.", "error");
+      console.error("라운지 게시 실패:", err);
+    }
+  };
+
+  // 🚫 라운지 게시 취소 (게시 → 미게시). 내 노트 화면에서 호출
+  const handleUnpublishFromLounge = async (note) => {
+    if (!user || !note || !note.communityPostId) return;
+    if (!window.confirm("라운지 게시를 취소할까요? 라운지의 글과 거기 달린 댓글·평점이 사라져요. (내 노트는 그대로 유지돼요.)")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', note.communityPostId));
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', note.id), { communityPostId: '' });
+      if (selectedDetailNote && selectedDetailNote.id === note.id) {
+        setSelectedDetailNote(prev => ({ ...prev, communityPostId: '' }));
+      }
+      showToast("라운지 게시가 취소되었습니다.", "success");
+    } catch (err) {
+      showToast("취소 중 오류가 발생했어요.", "error");
+      console.error("게시 취소 실패:", err);
     }
   };
 
@@ -2617,6 +2677,25 @@ export default function TastingApp() {
                 {selectedDetailNote.personalNotes ? `"${selectedDetailNote.personalNotes}"` : "작성된 한줄평이 없습니다."}
               </p>
             </div>
+
+            {/* 🍷 라운지 게시 / 게시 취소 (게시 상태에 따라 전환) */}
+            {selectedDetailNote.communityPostId ? (
+              <button
+                type="button"
+                onClick={() => handleUnpublishFromLounge(selectedDetailNote)}
+                className="w-full bg-white border-2 border-rose-200 text-rose-700 font-black py-3.5 rounded-xl text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 hover:bg-rose-50"
+              >
+                🚫 라운지 게시 취소
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handlePublishToLounge(selectedDetailNote)}
+                className="w-full bg-gradient-to-br from-rose-500 to-rose-700 text-white font-black py-3.5 rounded-xl text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5"
+              >
+                🍷 라운지에 게시하기
+              </button>
+            )}
 
             {/* 📝 즉시 수정하기(Edit) 액션 버튼 소환 */}
             <button
