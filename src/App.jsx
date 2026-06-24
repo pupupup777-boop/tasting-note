@@ -210,20 +210,22 @@ const compressImage = (base64Str, maxWidth = 400) => {
 const FractionalStarRating = ({ value, onChange, onSave }) => {
   const [hoverValue, setHoverValue] = useState(null);
   const ratingRef = useRef(null);
-  const displayValue = hoverValue !== null ? hoverValue : value;
+  const displayValue = hoverValue !== null ? hoverValue : (value || 0);
 
-  const handleMouseMove = (e) => {
-    if (!ratingRef.current) return;
+  // 위치 → 0.1 단위 점수 (0.0 ~ 5.0)
+  const computeFromX = (clientX) => {
+    if (!ratingRef.current) return 0;
     const rect = ratingRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const width = rect.width;
-    const percent = Math.min(Math.max(x / width, 0), 1);
-    const calculated = Math.round(percent * 5 * 2) / 2;
-    setHoverValue(calculated);
+    const percent = Math.min(Math.max((clientX - rect.left) / rect.width, 0), 1);
+    return Math.round(percent * 5 * 10) / 10; // 0.1 단위
   };
 
+  const handleMouseMove = (e) => setHoverValue(computeFromX(e.clientX));
   const handleMouseLeave = () => setHoverValue(null);
-  const handleClick = () => { if (onChange) onChange(displayValue); };
+  const handleTouchMove = (e) => { if (e.touches[0]) setHoverValue(computeFromX(e.touches[0].clientX)); };
+  const commit = (v) => { if (onChange) onChange(v); };
+  const handleClick = (e) => commit(computeFromX(e.clientX));
+  const handleTouchEnd = () => { commit(displayValue); setHoverValue(null); };
 
   return (
     <div className="flex items-center space-x-2 bg-white px-3 py-1 rounded-xl border border-gray-100 shadow-sm">
@@ -232,19 +234,23 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
-        className="flex cursor-pointer py-1 select-none"
+        onTouchStart={handleTouchMove}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="flex gap-0.5 cursor-pointer py-1 select-none"
+        style={{ touchAction: 'none' }}
       >
         {[1, 2, 3, 4, 5].map((star) => {
-          const isFull = displayValue >= star;
-          const isHalf = !isFull && displayValue >= star - 0.5;
+          const fillPct = Math.round(Math.min(Math.max(displayValue - (star - 1), 0), 1) * 100); // 0~100
           return (
-            <button key={star} type="button" className="p-0.5 focus:outline-none transition-transform active:scale-110">
-              <Icon
-                name="Star"
-                className={`w-5 h-5 ${isFull ? 'text-amber-400 fill-current' : isHalf ? 'text-amber-400 fill-current' : 'text-gray-200'}`}
-                style={isHalf ? { clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0% 100%)' } : undefined}
-              />
-            </button>
+            <div key={star} className="relative w-6 h-6 transition-transform active:scale-110">
+              {/* 바탕(회색) 별 */}
+              <Icon name="Star" className="w-6 h-6 text-gray-200 fill-current absolute inset-0" />
+              {/* 채워지는(금색) 별 — 게이지처럼 왼쪽부터 fillPct%만큼 */}
+              <div className="absolute inset-0 overflow-hidden" style={{ width: `${fillPct}%` }}>
+                <Icon name="Star" className="w-6 h-6 text-amber-400 fill-current" />
+              </div>
+            </div>
           );
         })}
       </div>
