@@ -480,6 +480,7 @@ export default function TastingApp() {
   const [usageInfo, setUsageInfo] = useState(null);            // Firestore usage 문서 캐시
 
   const fileInputRef = useRef(null);
+  const searchFileInputRef = useRef(null);
   const [inputMode, setInputMode] = useState('photo'); // 'photo' | 'name' : 추가하기 입력 방식
   const [nameQuery, setNameQuery] = useState('');       // 이름으로 찾기 입력값
   // 📊 필터 및 정렬 연산 장치를 컴포넌트 최상단으로 격리 (무한 루프 에러 완치)
@@ -827,8 +828,9 @@ export default function TastingApp() {
     setIsMenuOpen(false);
   };
 
-  const handleSearchLiquor = async () => {
-    if (!searchQuery.trim()) return;
+  const handleSearchLiquor = async (queryOverride) => {
+    const q = (typeof queryOverride === 'string' ? queryOverride : searchQuery).trim();
+    if (!q) return;
 
     // ✅ [레벨2 - 로그인 게이트] 구글 로그인한 회원만 AI 검색 사용 가능
     if (!user || user.isAnonymous) {
@@ -844,7 +846,7 @@ export default function TastingApp() {
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: searchQuery })
+        body: JSON.stringify({ query: q })
       });
 
       if (!response.ok) {
@@ -866,6 +868,51 @@ export default function TastingApp() {
     } finally {
       setIsSearching(false);
     }
+  };
+
+  // 📷 사진으로 보틀 검색: 라벨 사진 → 이름 추출 → 그 이름으로 검색
+  const handleSearchByPhoto = async (base64Image) => {
+    if (!user || user.isAnonymous) { showToast("AI 검색은 구글 로그인 후 이용할 수 있어요!", "error"); return; }
+    setIsSearching(true);
+    setSearchResult(null);
+    try {
+      const base64Data = base64Image.split(',')[1];
+      const exRes = await fetch('/api/extract-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64Data })
+      });
+      if (!exRes.ok) {
+        showToast("사진에서 정보를 읽지 못했어요. 다른 사진으로 시도해 주세요.", "error");
+        setIsSearching(false);
+        return;
+      }
+      const { name } = await exRes.json();
+      if (!name || !name.trim()) {
+        showToast("라벨에서 이름을 찾지 못했어요. 더 선명한 사진으로 시도해 주세요.", "info");
+        setIsSearching(false);
+        return;
+      }
+      setSearchQuery(name);
+      await handleSearchLiquor(name); // 추출한 이름으로 바로 검색 (자체적으로 isSearching 처리)
+    } catch (err) {
+      showToast("사진 검색 중 오류가 발생했어요.", "error");
+      console.error("사진 검색 에러:", err);
+      setIsSearching(false);
+    }
+  };
+
+  const triggerSearchPhoto = () => searchFileInputRef.current?.click();
+  const handleSearchPhotoUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const compressed = await compressImage(reader.result, 700);
+      handleSearchByPhoto(compressed);
+    };
+    reader.readAsDataURL(file);
+    if (searchFileInputRef.current) searchFileInputRef.current.value = '';
   };
 
   const triggerFileInput = () => fileInputRef.current?.click();
@@ -2442,6 +2489,17 @@ export default function TastingApp() {
             {isSearching ? <Icon name="Loader2" className="w-5 h-5 animate-spin" /> : <Icon name="Search" className="w-5 h-5" />}
           </button>
         </div>
+
+        {/* 📷 사진으로 검색 */}
+        <input type="file" accept="image/*" ref={searchFileInputRef} onChange={handleSearchPhotoUpload} className="hidden" />
+        <button
+          onClick={triggerSearchPhoto}
+          disabled={isSearching}
+          className="w-full flex items-center justify-center gap-2 bg-white border border-indigo-200 text-indigo-700 font-black text-sm py-3 rounded-2xl shadow-sm hover:bg-indigo-50 transition-colors disabled:opacity-50"
+        >
+          <Icon name="Camera" className="w-5 h-5" /> 사진으로 검색하기
+        </button>
+        <p className="text-[11px] text-gray-400 font-medium text-center -mt-1">라벨 사진을 올리면 이름을 읽어 검색해드려요.</p>
 
         {searchResult && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden animate-in fade-in slide-in-from-top-4">
