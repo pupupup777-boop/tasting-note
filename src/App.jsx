@@ -452,6 +452,9 @@ export default function TastingApp() {
   const [image, setImage] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
+  const [detailsInfo, setDetailsInfo] = useState(null);     // 자세한 정보 결과 {summary, tasting, pairing, trivia}
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsSource, setDetailsSource] = useState('');   // 'cache' | 'ai' : 방금 결과 출처
   const [error, setError] = useState(null);
   const [price, setPrice] = useState('');
   const [ratings, setRatings] = useState({});
@@ -679,6 +682,7 @@ export default function TastingApp() {
   const resetForm = () => {
     setImage(null);
     setAnalysisResult(null);
+    setDetailsInfo(null); setDetailsSource("");
     setPrice('');
     setRatings({});
     setSelectedAromas([]);
@@ -915,6 +919,73 @@ export default function TastingApp() {
     if (searchFileInputRef.current) searchFileInputRef.current.value = '';
   };
 
+  // 🔍 자세한 정보 (역사/테이스팅/페어링, 금액 제외) — 캐시 우선, AI 사용 시에만 카운트
+  const handleFetchDetails = async () => {
+    if (!analysisResult || !analysisResult.name) { showToast("먼저 라벨을 분석해 주세요.", "info"); return; }
+    if (!user || user.isAnonymous) { showToast("자세한 정보는 구글 로그인 후 이용할 수 있어요!", "error"); return; }
+    if (detailsLoading) return;
+
+    setDetailsLoading(true);
+    setDetailsInfo(null);
+    setDetailsSource('');
+
+    const key = normalizeWineName(analysisResult.name);
+    const catalogRef = key ? doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', key) : null;
+
+    try {
+      // 1) 캐시 확인 (catalog 문서의 details 필드) — 있으면 공짜
+      if (catalogRef) {
+        try {
+          const snap = await getDoc(catalogRef);
+          if (snap.exists() && snap.data().details) {
+            setDetailsInfo(snap.data().details);
+            setDetailsSource('cache');
+            console.log("[DETAILS CACHE HIT]", key);
+            setDetailsLoading(false);
+            return; // 카운트 안 함
+          }
+        } catch (e) { console.error("details 캐시 조회 실패:", e); }
+      }
+
+      // 2) 캐시 없음 → 한도 확인 (라벨 5개 풀 공유)
+      const allowed = await checkLabelLimit();
+      if (!allowed) {
+        showToast(`AI 사용은 하루 ${DAILY_LABEL_LIMIT}개까지예요. 자정에 초기화돼요!`, "info");
+        setDetailsLoading(false);
+        return;
+      }
+
+      // 3) AI 호출
+      const res = await fetch('/api/details', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: analysisResult.name })
+      });
+      if (!res.ok) {
+        if (res.status === 429) showToast("이번 달 AI 한도를 초과했어요. 잠시 후 다시 시도해 주세요.", "error");
+        else if (res.status === 503) showToast("지금 서버가 혼잡해요. 잠시 후 다시 시도해 주세요.", "error");
+        else showToast("자세한 정보를 불러오지 못했어요.", "error");
+        setDetailsLoading(false);
+        return;
+      }
+      const parsed = await res.json();
+      setDetailsInfo(parsed);
+      setDetailsSource('ai');
+      setDetailsLoading(false);
+      console.log("[DETAILS AI]", analysisResult.name);
+      incrementLabelCount(); // AI 사용했으니 카운트 (백그라운드)
+
+      // 카탈로그에 details 저장 (백그라운드) → 다음 사람은 공짜
+      if (catalogRef) {
+        setDoc(catalogRef, { details: parsed, name: analysisResult.name }, { merge: true }).catch(e => console.error("details 저장 실패:", e));
+      }
+    } catch (err) {
+      showToast("자세한 정보 조회 중 오류가 발생했어요.", "error");
+      console.error("자세한 정보 에러:", err);
+      setDetailsLoading(false);
+    }
+  };
+
   const triggerFileInput = () => fileInputRef.current?.click();
 
   const handleImageUpload = (e) => {
@@ -1083,6 +1154,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null); // 새 분석 시작 시 이전 결과 초기화 (다시 찍기 대응)
+    setDetailsInfo(null); setDetailsSource("");
     const base64Data = base64Image.split(',')[1];
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1218,6 +1290,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null);
+    setDetailsInfo(null); setDetailsSource("");
     setImage(null); // 사진 없이 진행
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1787,7 +1860,57 @@ export default function TastingApp() {
                 </div>
               </div>
 
-
+              {/* 🔍 자세한 정보 (보틀 백과) */}
+              {(() => {
+                const today = getTodayStr();
+                const used = usageInfo?.labelDate === today ? (usageInfo?.labelCount || 0) : 0;
+                const left = Math.max(0, DAILY_LABEL_LIMIT - used);
+                return (
+                  <div>
+                    {!detailsInfo ? (
+                      <button
+                        onClick={handleFetchDetails}
+                        disabled={detailsLoading}
+                        className="w-full flex items-center justify-center gap-2 bg-white border border-indigo-200 text-indigo-700 font-black text-sm py-3 rounded-2xl shadow-sm hover:bg-indigo-50 transition-colors disabled:opacity-60"
+                      >
+                        {detailsLoading ? <><Icon name="Loader2" className="w-4 h-4 animate-spin" /> 정보를 찾고 있어요...</> : <><Icon name="Search" className="w-4 h-4" /> 자세한 정보 보기 {!isAdmin && <span className="text-[10px] opacity-70 font-mono">(오늘 {left}/{DAILY_LABEL_LIMIT})</span>}</>}
+                      </button>
+                    ) : (
+                      <div className="bg-indigo-50/40 border border-indigo-100 rounded-2xl p-4 space-y-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-indigo-900">📖 보틀 백과</span>
+                          <span className="text-[9px] font-bold text-gray-400">{detailsSource === 'cache' ? '🍷 저장된 정보' : '✨ 새로 찾음'}</span>
+                        </div>
+                        {detailsInfo.summary && (
+                          <div>
+                            <p className="text-[10px] font-black text-indigo-400 mb-0.5">역사 · 특징</p>
+                            <p className="text-xs text-gray-700 leading-relaxed">{detailsInfo.summary}</p>
+                          </div>
+                        )}
+                        {detailsInfo.tasting && (
+                          <div>
+                            <p className="text-[10px] font-black text-indigo-400 mb-0.5">테이스팅 노트</p>
+                            <p className="text-xs text-gray-700 leading-relaxed">{detailsInfo.tasting}</p>
+                          </div>
+                        )}
+                        {detailsInfo.pairing && (
+                          <div>
+                            <p className="text-[10px] font-black text-indigo-400 mb-0.5">페어링 · 팁</p>
+                            <p className="text-xs text-gray-700 leading-relaxed">{detailsInfo.pairing}</p>
+                          </div>
+                        )}
+                        {detailsInfo.trivia && (
+                          <div>
+                            <p className="text-[10px] font-black text-indigo-400 mb-0.5">알아두면 좋은 점</p>
+                            <p className="text-xs text-gray-700 leading-relaxed">{detailsInfo.trivia}</p>
+                          </div>
+                        )}
+                        <p className="text-[9px] text-gray-300 font-medium text-center pt-1">AI가 정리한 정보라 일부 부정확할 수 있어요</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
