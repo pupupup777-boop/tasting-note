@@ -1777,7 +1777,7 @@ export default function TastingApp() {
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
                     <div>
                       <span className={`block text-[10px] mb-0.5 font-bold ${isRedMode ? 'text-white/50' : 'text-amber-800/60'}`}>지역/국가</span>
-                      <span className="font-black truncate block">{analysisResult.region || '-'}</span>
+                      <span className="font-black block break-words leading-snug">{analysisResult.region || '-'}</span>
                     </div>
                     <div>
                       <span className={`block text-[10px] mb-0.5 font-bold ${isRedMode ? 'text-white/50' : 'text-amber-800/60'}`}>숙성/빈티지</span>
