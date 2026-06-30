@@ -855,10 +855,11 @@ export default function TastingApp() {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
+        const diag = isAdmin ? `  🔧[${response.status} ${adminErrHint(response.status)}]${errData.detail ? ' ' + String(errData.detail).replace(/\s+/g, ' ').slice(0, 140) : ''}` : '';
         if (response.status === 429) {
-          showToast("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요.", "error");
+          showToast("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요." + diag, "error");
         } else {
-          showToast("검색 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", "error");
+          showToast("검색 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요." + diag, "error");
         }
         console.error("검색 서버 에러:", response.status, errData);
         return;
@@ -867,7 +868,7 @@ export default function TastingApp() {
       const parsed = await response.json();
       setSearchResult(parsed);
     } catch (err) {
-      showToast("서버 통신에 실패했습니다.", "error");
+      showToast("서버 통신에 실패했습니다." + adminDiagErr(err), "error");
       console.error("최종 검색 에러:", err);
     } finally {
       setIsSearching(false);
@@ -887,7 +888,7 @@ export default function TastingApp() {
         body: JSON.stringify({ base64Data })
       });
       if (!exRes.ok) {
-        showToast("사진에서 정보를 읽지 못했어요. 다른 사진으로 시도해 주세요.", "error");
+        showToast("사진에서 정보를 읽지 못했어요. 다른 사진으로 시도해 주세요." + (await adminDiag(exRes)), "error");
         setIsSearching(false);
         return;
       }
@@ -900,7 +901,7 @@ export default function TastingApp() {
       setSearchQuery(name);
       await handleSearchLiquor(name); // 추출한 이름으로 바로 검색 (자체적으로 isSearching 처리)
     } catch (err) {
-      showToast("사진 검색 중 오류가 발생했어요.", "error");
+      showToast("사진 검색 중 오류가 발생했어요." + adminDiagErr(err), "error");
       console.error("사진 검색 에러:", err);
       setIsSearching(false);
     }
@@ -962,9 +963,10 @@ export default function TastingApp() {
         body: JSON.stringify({ name: analysisResult.name })
       });
       if (!res.ok) {
-        if (res.status === 429) showToast("이번 달 AI 한도를 초과했어요. 잠시 후 다시 시도해 주세요.", "error");
-        else if (res.status === 503) showToast("지금 서버가 혼잡해요. 잠시 후 다시 시도해 주세요.", "error");
-        else showToast("자세한 정보를 불러오지 못했어요.", "error");
+        const diag = await adminDiag(res);
+        if (res.status === 429) showToast("이번 달 AI 한도를 초과했어요. 잠시 후 다시 시도해 주세요." + diag, "error");
+        else if (res.status === 503) showToast("지금 서버가 혼잡해요. 잠시 후 다시 시도해 주세요." + diag, "error");
+        else showToast("자세한 정보를 불러오지 못했어요." + diag, "error");
         setDetailsLoading(false);
         return;
       }
@@ -980,7 +982,7 @@ export default function TastingApp() {
         setDoc(catalogRef, { details: parsed, name: analysisResult.name }, { merge: true }).catch(e => console.error("details 저장 실패:", e));
       }
     } catch (err) {
-      showToast("자세한 정보 조회 중 오류가 발생했어요.", "error");
+      showToast("자세한 정보 조회 중 오류가 발생했어요." + adminDiagErr(err), "error");
       console.error("자세한 정보 에러:", err);
       setDetailsLoading(false);
     }
@@ -1012,6 +1014,31 @@ export default function TastingApp() {
   const INSIGHT_COOLDOWN_MS = 5 * 24 * 60 * 60 * 1000; // 5일
   const ADMIN_UIDS = ['27zSkaf4TcOO6Xav29dZhXKY5o22']; // 👑 무제한 사용 계정(관리자)
   const isAdmin = !!user && ADMIN_UIDS.includes(user.uid);
+
+  // 🔧 [관리자 전용] 에러 원인 진단 문자열. 일반 사용자에겐 빈 문자열(아무것도 안 붙음)
+  const adminErrHint = (status) => {
+    if (status === 503) return 'Gemini 과부하 — 잠시 후 재시도하면 됨';
+    if (status === 429) return 'API 사용량/분당 한도 초과';
+    if (status === 401 || status === 403) return '인증·API키 문제';
+    if (status === 400) return '잘못된 요청(코드 문제 가능성)';
+    if (status === 500 || status === 502) return '서버/코드 오류';
+    if (status === 408) return '시간 초과(타임아웃)';
+    return '기타 오류';
+  };
+  // 응답에서 관리자용 진단 메시지를 만든다(본문 detail 일부 포함). 일반 사용자는 '' 반환.
+  const adminDiag = async (res) => {
+    if (!isAdmin) return '';
+    let detail = '';
+    try { const j = await res.json(); detail = j.detail || j.error || ''; } catch (e) { /* 본문 없음 */ }
+    if (typeof detail === 'string') detail = detail.replace(/\s+/g, ' ').slice(0, 140);
+    return `  🔧[${res.status} ${adminErrHint(res.status)}]${detail ? ' ' + detail : ''}`;
+  };
+  // 네트워크/예외용 관리자 진단
+  const adminDiagErr = (err) => {
+    if (!isAdmin) return '';
+    if (err?.name === 'AbortError') return '  🔧[타임아웃: 응답이 너무 늦음]';
+    return `  🔧[예외: ${String(err?.message || err).slice(0, 140)}]`;
+  };
 
   const usageDocRef = () => doc(db, 'artifacts', appId, 'users', user.uid, 'meta', 'usage');
   const getTodayStr = () => { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; };
@@ -1214,10 +1241,11 @@ export default function TastingApp() {
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
+        const diag = isAdmin ? `  🔧[${response.status} ${adminErrHint(response.status)}]${errData.detail ? ' ' + String(errData.detail).replace(/\s+/g, ' ').slice(0, 140) : ''}` : '';
         if (response.status === 429) {
-          setError("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요.");
+          setError("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요." + diag);
         } else {
-          setError("정밀 분석 중 오류가 발생했습니다. 잠시 후 다시 이미지를 등록해 주세요.");
+          setError("정밀 분석 중 오류가 발생했습니다. 잠시 후 다시 이미지를 등록해 주세요." + diag);
         }
         showToast("라벨 분석 실패", "error");
         console.error("분석 서버 에러:", response.status, errData);
@@ -1269,7 +1297,7 @@ export default function TastingApp() {
         }
       }
     } catch (err) {
-      setError("서버 통신 오류로 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요.");
+      setError("서버 통신 오류로 정밀 분석이 지연되고 있습니다. 잠시 후 다시 이미지를 등록해 주세요." + adminDiagErr(err));
       showToast("라벨 분석 실패", "error");
       console.error("최종 분석 에러:", err);
     } finally {
@@ -1331,9 +1359,9 @@ export default function TastingApp() {
       } catch (fetchErr) {
         clearTimeout(timeoutId);
         if (fetchErr.name === 'AbortError') {
-          setError("검색이 너무 오래 걸려요. 잠시 후 다시 시도하거나 사진으로 등록해 주세요.");
+          setError("검색이 너무 오래 걸려요. 잠시 후 다시 시도하거나 사진으로 등록해 주세요." + adminDiagErr(fetchErr));
         } else {
-          setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요.");
+          setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요." + adminDiagErr(fetchErr));
         }
         showToast("검색 실패", "error");
         setIsAnalyzing(false);
@@ -1341,9 +1369,10 @@ export default function TastingApp() {
       }
       clearTimeout(timeoutId);
       if (!res.ok) {
-        if (res.status === 429) setError("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요.");
-        else if (res.status === 503) setError("지금 검색 서버가 혼잡해요. 잠시 후 다시 시도해 주세요.");
-        else setError("정보를 찾는 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요.");
+        const diag = await adminDiag(res);
+        if (res.status === 429) setError("이번 달 AI 사용 한도를 초과했어요. 잠시 후 다시 시도해 주세요." + diag);
+        else if (res.status === 503) setError("지금 검색 서버가 혼잡해요. 잠시 후 다시 시도해 주세요." + diag);
+        else setError("정보를 찾는 중 오류가 발생했어요. 잠시 후 다시 시도해 주세요." + diag);
         showToast("검색 실패", "error");
         setIsAnalyzing(false);
         return;
@@ -1376,7 +1405,7 @@ export default function TastingApp() {
         }, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
       }
     } catch (err) {
-      setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요.");
+      setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요." + adminDiagErr(err));
       showToast("검색 실패", "error");
       console.error("이름 검색 에러:", err);
     } finally {
