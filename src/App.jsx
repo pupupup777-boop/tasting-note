@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc, getDocs, runTransaction } from 'firebase/firestore';
 
 const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "";
 
@@ -518,9 +518,9 @@ export default function TastingApp() {
   const processedNotes = useMemo(() => {
     let result = [...safeNotes];
 
-    // 1. 와인 스타일 필터
+    // 1. 와인 스타일 필터 (⚠️ 와인 노트에만 적용 — 위스키/사케/맥주가 '레드'로 끌려오던 버그 수정)
     if (filterStyle && filterStyle !== 'all') {
-      result = result.filter(n => (n?.analysisResult?.wineStyle || 'red') === filterStyle);
+      result = result.filter(n => n?.liquorType === 'wine' && (n?.analysisResult?.wineStyle || 'red') === filterStyle);
     }
 
     // 2. 국가 단위 필터 (영어/세부명 완벽 클렌징 매칭)
@@ -630,6 +630,12 @@ export default function TastingApp() {
     );
     return () => unsubscribe();
   }, [user?.uid]);
+
+  // 📊 랭킹 막대 분모용: 커뮤니티 최고 점수 (기존엔 정렬 안 된 [0]번 글을 써서 막대 폭이 틀렸음)
+  const maxCommunityScore = useMemo(
+    () => Math.max(1, ...communityPosts.map(p => p.totalCommunityScore || 0)),
+    [communityPosts]
+  );
 
   const userStats = useMemo(() => {
     const stats = {};
@@ -849,7 +855,7 @@ export default function TastingApp() {
       // 키를 들고 구글을 부르는 건 서버(/api/search)가 한다. 브라우저는 검색어만 보낸다.
       const response = await fetch('/api/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ query: q })
       });
 
@@ -884,7 +890,7 @@ export default function TastingApp() {
       const base64Data = base64Image.split(',')[1];
       const exRes = await fetch('/api/extract-name', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ base64Data })
       });
       if (!exRes.ok) {
@@ -959,7 +965,7 @@ export default function TastingApp() {
       // 3) AI 호출
       const res = await fetch('/api/details', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ name: analysisResult.name })
       });
       if (!res.ok) {
@@ -1038,6 +1044,15 @@ export default function TastingApp() {
     if (!isAdmin) return '';
     if (err?.name === 'AbortError') return '  🔧[타임아웃: 응답이 너무 늦음]';
     return `  🔧[예외: ${String(err?.message || err).slice(0, 140)}]`;
+  };
+
+  // 🔒 서버 API 호출용 헤더: Firebase ID 토큰을 실어 보낸다 (서버가 로그인 여부를 검증)
+  const authHeaders = async () => {
+    const h = { 'Content-Type': 'application/json' };
+    try {
+      if (auth.currentUser) h['Authorization'] = `Bearer ${await auth.currentUser.getIdToken()}`;
+    } catch (e) { console.error("토큰 발급 실패:", e); }
+    return h;
   };
 
   const usageDocRef = () => doc(db, 'artifacts', appId, 'users', user.uid, 'meta', 'usage');
@@ -1129,7 +1144,7 @@ export default function TastingApp() {
     try {
       const res = await fetch('/api/insights', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ mode, profile, liquorName })
       });
       if (!res.ok) {
@@ -1193,7 +1208,7 @@ export default function TastingApp() {
       try {
         const nameRes = await fetch('/api/extract-name', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders(),
           body: JSON.stringify({ base64Data })
         });
         if (nameRes.ok) {
@@ -1222,7 +1237,7 @@ export default function TastingApp() {
             setIsAnalyzing(false); // ✅ 즉시 표시
             console.log("[CACHE HIT] 카탈로그에서 불러옴 (AI 미사용):", lookupKey);
             showToast("🍷 주종을 감지했습니다!", "success");
-            incrementLabelCount(); // 백그라운드
+            // ✅ 캐시 히트는 AI를 안 썼으므로 일일 한도 차감 안 함 (details와 동일 규칙)
             return; // 🎯 비싼 상세분석 스킵
           }
         } catch (e) {
@@ -1235,7 +1250,7 @@ export default function TastingApp() {
       // ─────────────────────────────────────────────
       const response = await fetch('/api/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ base64Data, liquorName: config.name })
       });
 
@@ -1272,22 +1287,25 @@ export default function TastingApp() {
       incrementLabelCount(); // 카운트는 백그라운드로 (await 안 함)
 
       // 🗂️ 공용 카탈로그에 저장 (백그라운드) → 다음 사람은 AI 상세분석 없이 가져감
-      const saveKey = normalizeWineName(parsed.name);
-      if (saveKey) {
-        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
-        setDoc(catalogRef, {
-          name: parsed.name || '',
-          type: parsed.type || '',
-          region: parsed.region || '',
-          vintage: parsed.vintage || '',
-          grape: parsed.grape || '',
-          producer: parsed.producer || '',
-          detectedCategory: parsed.detectedCategory || selectedLiquorType,
-          wineStyle: parsed.wineStyle || null,
-          createdAt: Date.now(),
-          firstBy: user.uid
-        }, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
-      }
+      // ⚠️ 조회는 extract-name의 이름(lookupKey)으로 하는데 저장을 analyze의 이름으로만 하면
+      //    키가 달라 캐시가 안 맞았음. → 두 키(추출 이름 + 보정 이름) 모두에 저장해 다음 조회가 반드시 맞도록.
+      const catalogData = {
+        name: parsed.name || '',
+        type: parsed.type || '',
+        region: parsed.region || '',
+        vintage: parsed.vintage || '',
+        grape: parsed.grape || '',
+        producer: parsed.producer || '',
+        detectedCategory: parsed.detectedCategory || selectedLiquorType,
+        wineStyle: parsed.wineStyle || null,
+        createdAt: Date.now(),
+        firstBy: user.uid
+      };
+      const catalogKeys = [...new Set([normalizeWineName(parsed.name), lookupKey].filter(Boolean))];
+      catalogKeys.forEach((k) => {
+        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', k);
+        setDoc(catalogRef, catalogData, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
+      });
 
       if (shareToCommunity) {
         if (parsed.isCodeDetected) {
@@ -1338,7 +1356,7 @@ export default function TastingApp() {
             setIsAnalyzing(false); // ✅ 즉시 표시
             console.log("[CACHE HIT] (이름검색):", lookupKey);
             showToast("🍷 정보를 불러왔어요!", "success");
-            incrementLabelCount();
+            // ✅ 캐시 히트는 AI를 안 썼으므로 일일 한도 차감 안 함
             setNameQuery('');
             return;
           }
@@ -1352,7 +1370,7 @@ export default function TastingApp() {
       try {
         res = await fetch('/api/analyze-name', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders(),
           body: JSON.stringify({ name: q, liquorName: config.name }),
           signal: controller.signal
         });
@@ -1394,16 +1412,18 @@ export default function TastingApp() {
       setNameQuery('');
 
       // 카탈로그 저장 (백그라운드)
-      const saveKey = normalizeWineName(parsed.name || q);
-      if (saveKey) {
-        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
-        setDoc(catalogRef, {
-          name: parsed.name || q, type: parsed.type || '', region: parsed.region || '',
-          vintage: parsed.vintage || '', grape: parsed.grape || '', producer: parsed.producer || '',
-          detectedCategory: parsed.detectedCategory || selectedLiquorType, wineStyle: parsed.wineStyle || null,
-          createdAt: Date.now(), firstBy: user.uid
-        }, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
-      }
+      // ⚠️ 조회키(lookupKey=입력어)와 저장키(parsed.name)가 달라 캐시 미스 나던 문제 → 두 키 모두에 저장
+      const catalogData = {
+        name: parsed.name || q, type: parsed.type || '', region: parsed.region || '',
+        vintage: parsed.vintage || '', grape: parsed.grape || '', producer: parsed.producer || '',
+        detectedCategory: parsed.detectedCategory || selectedLiquorType, wineStyle: parsed.wineStyle || null,
+        createdAt: Date.now(), firstBy: user.uid
+      };
+      const catalogKeys = [...new Set([normalizeWineName(parsed.name || q), lookupKey].filter(Boolean))];
+      catalogKeys.forEach((k) => {
+        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', k);
+        setDoc(catalogRef, catalogData, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
+      });
     } catch (err) {
       setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요." + adminDiagErr(err));
       showToast("검색 실패", "error");
@@ -1488,51 +1508,49 @@ export default function TastingApp() {
 
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
     try {
-      const postSnap = communityPosts.find(p => p.id === postId);
-      if (!postSnap) return;
+      // 🔒 트랜잭션: 항상 "지금 서버에 있는" 최신 투표 상태를 읽고 갱신 → 동시 투표해도 유실 없음
+      const txResult = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(postRef);
+        if (!snap.exists()) throw new Error("post-not-found");
+        const fresh = snap.data();
 
-      const currentVotes = postSnap.votes || { voters: {}, yesCount: 0, noCount: 0 };
-      const currentVoters = currentVotes.voters || {};
+        const currentVoters = (fresh.votes && fresh.votes.voters) || {};
+        if (currentVoters[user.uid] !== undefined) return { already: true };
 
-      if (currentVoters[user.uid] !== undefined) {
+        const updatedVoters = { ...currentVoters, [user.uid]: voteValue };
+        let yesCount = 0;
+        let noCount = 0;
+        Object.values(updatedVoters).forEach(v => {
+          if (v === 'yes') yesCount++;
+          if (v === 'no') noCount++;
+        });
+
+        const totalVotes = yesCount + noCount;
+        let verificationStatus = fresh.verificationStatus || 'pending_vote';
+        if (totalVotes >= 3) {
+          verificationStatus = (yesCount / totalVotes >= 0.5) ? 'community_verified' : 'pending_vote';
+        }
+
+        tx.update(postRef, {
+          "votes.voters": updatedVoters,
+          "votes.yesCount": yesCount,
+          "votes.noCount": noCount,
+          verificationStatus,
+          isVerified: verificationStatus === 'community_verified' || verificationStatus === 'ai_verified'
+        });
+        return { already: false, updatedVoters, yesCount, noCount, verificationStatus };
+      });
+
+      if (txResult.already) {
         showToast("이미 이 보틀에 대한 인증 투표를 완료하셨습니다.", "info");
         return;
       }
 
-      const updatedVoters = { ...currentVoters, [user.uid]: voteValue };
-
-      let yesCount = 0;
-      let noCount = 0;
-      Object.values(updatedVoters).forEach(v => {
-        if (v === 'yes') yesCount++;
-        if (v === 'no') noCount++;
-      });
-
-      const totalVotes = yesCount + noCount;
-      let verificationStatus = postSnap.verificationStatus || 'pending_vote';
-
-      if (totalVotes >= 3) {
-        const yesRatio = yesCount / totalVotes;
-        if (yesRatio >= 0.5) {
-          verificationStatus = 'community_verified';
-        } else {
-          verificationStatus = 'pending_vote';
-        }
-      }
-
-      await updateDoc(postRef, {
-        "votes.voters": updatedVoters,
-        "votes.yesCount": yesCount,
-        "votes.noCount": noCount,
-        verificationStatus,
-        isVerified: verificationStatus === 'community_verified' || verificationStatus === 'ai_verified'
-      });
-
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({
           ...prev,
-          verificationStatus,
-          votes: { voters: updatedVoters, yesCount, noCount }
+          verificationStatus: txResult.verificationStatus,
+          votes: { voters: txResult.updatedVoters, yesCount: txResult.yesCount, noCount: txResult.noCount }
         }));
       }
 
@@ -1623,8 +1641,14 @@ export default function TastingApp() {
     if (!window.confirm("이 댓글을 삭제할까요?")) return;
     try {
       const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', post.id);
-      const updatedComments = (post.comments || []).filter(c => c.id !== comment.id);
-      await updateDoc(postRef, { comments: updatedComments });
+      // 🔒 트랜잭션: 최신 comments를 읽고 지움 → 그 사이 달린 다른 댓글이 날아가지 않음
+      const updatedComments = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(postRef);
+        if (!snap.exists()) throw new Error("post-not-found");
+        const next = (snap.data().comments || []).filter(c => c.id !== comment.id);
+        tx.update(postRef, { comments: next });
+        return next;
+      });
       if (selectedDetailNote && selectedDetailNote.id === post.id) {
         setSelectedDetailNote(prev => ({ ...prev, comments: updatedComments }));
       }
@@ -1658,31 +1682,39 @@ export default function TastingApp() {
       };
 
       // 🎯 댓글 작성 시: 드래그로 골라둔 별점이 있으면 이때 함께 "확정"한다.
-      const targetPost = communityPosts.find(p => p.id === postId);
+      // 🔒 트랜잭션: 별점/총점을 서버의 최신 값 기준으로 계산 → 동시에 별점 줘도 서로 안 지움
       const pending = pendingRatings[postId];
-      const isAuthor = targetPost?.userId === user.uid;
-      const alreadyRated = targetPost?.ratings?.[user.uid] != null;
+      const txResult = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(postRef);
+        if (!snap.exists()) throw new Error("post-not-found");
+        const fresh = snap.data();
 
-      const updatePayload = { comments: arrayUnion(newComment) };
-      let committedRatings = null;
-      let committedTotal = null;
+        const isAuthor = fresh.userId === user.uid;
+        const alreadyRated = fresh.ratings?.[user.uid] != null;
 
-      if (pending != null && !isAuthor && !alreadyRated) {
-        const updatedRatings = { ...(targetPost?.ratings || {}) };
-        updatedRatings[user.uid] = pending;
-        const authorId = targetPost?.userId;
-        committedTotal = Object.entries(updatedRatings).reduce((acc, [uid, val]) => (uid === authorId ? acc : acc + (Number(val) || 0)), 0);
-        committedRatings = updatedRatings;
-        updatePayload.ratings = updatedRatings;
-        updatePayload.totalCommunityScore = committedTotal;
-      }
+        const updatePayload = { comments: [...(fresh.comments || []), newComment] };
+        let committedRatings = null;
+        let committedTotal = null;
 
-      await updateDoc(postRef, updatePayload);
+        if (pending != null && !isAuthor && !alreadyRated) {
+          const updatedRatings = { ...(fresh.ratings || {}) };
+          updatedRatings[user.uid] = pending;
+          const authorId = fresh.userId;
+          committedTotal = Object.entries(updatedRatings).reduce((acc, [uid, val]) => (uid === authorId ? acc : acc + (Number(val) || 0)), 0);
+          committedRatings = updatedRatings;
+          updatePayload.ratings = updatedRatings;
+          updatePayload.totalCommunityScore = committedTotal;
+        }
+
+        tx.update(postRef, updatePayload);
+        return { comments: updatePayload.comments, committedRatings, committedTotal };
+      });
+      const { committedRatings, committedTotal } = txResult;
 
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({
           ...prev,
-          comments: [...(prev.comments || []), newComment],
+          comments: txResult.comments,
           ...(committedRatings ? { ratings: committedRatings, totalCommunityScore: committedTotal } : {})
         }));
       }
@@ -1701,9 +1733,6 @@ export default function TastingApp() {
     if (!user || !replyInputs[commentId]?.trim()) return;
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
     try {
-      const targetPost = communityPosts.find(p => p.id === postId);
-      if (!targetPost) return;
-
       const newReply = {
         id: Date.now().toString() + Math.random(),
         userId: user.uid,
@@ -1712,15 +1741,19 @@ export default function TastingApp() {
         createdAt: Date.now()
       };
 
-      // 기존 댓글 배열을 돌면서 매칭되는 댓글의 replies 내부에 새 대댓글 누적하기
-      const updatedComments = (targetPost.comments || []).map(c => {
-        if (c.id === commentId) {
-          return { ...c, replies: [...(c.replies || []), newReply] };
-        }
-        return c;
+      // 🔒 트랜잭션: 서버의 최신 comments 기준으로 대댓글 누적 → 그 사이 달린 댓글/답글 유실 방지
+      const updatedComments = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(postRef);
+        if (!snap.exists()) throw new Error("post-not-found");
+        const next = (snap.data().comments || []).map(c => {
+          if (c.id === commentId) {
+            return { ...c, replies: [...(c.replies || []), newReply] };
+          }
+          return c;
+        });
+        tx.update(postRef, { comments: next });
+        return next;
       });
-
-      await updateDoc(postRef, { comments: updatedComments });
 
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({ ...prev, comments: updatedComments }));
@@ -2303,7 +2336,7 @@ export default function TastingApp() {
                 <div>
                   <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                     <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${theme.bg} ${theme.text}`}>
-                      {note.analysisResult?.wineStyle === 'white' ? '🥂 화이트' : note.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인' : note.analysisResult?.wineStyle === 'desert' ? '🍯 디저트' : '🍷 레드'}
+                      {note.liquorType !== 'wine' ? `${conf.icon} ${conf.name}` : note.analysisResult?.wineStyle === 'white' ? '🥂 화이트' : note.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인' : note.analysisResult?.wineStyle === 'desert' ? '🍯 디저트' : '🍷 레드'}
                     </span>
                     {note.analysisResult?.vintage && note.analysisResult.vintage !== 'null' && (
                       <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
@@ -2486,7 +2519,7 @@ export default function TastingApp() {
                               <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-indigo-700 font-mono">{post.totalCommunityScore ? post.totalCommunityScore.toFixed(1) : "0.0"} 점</span>
                             </div>
                             <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden border border-gray-200/40 shadow-inner">
-                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
+                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / maxCommunityScore) * 100)}%` }}></div>
                             </div>
                             <p className="text-[9px] text-gray-400 font-bold text-right">참여: {Object.keys(post.ratings || {}).length}명 / 평점: {post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length).toFixed(1) : "0.0"}점</p>
                           </div>
@@ -2852,7 +2885,7 @@ export default function TastingApp() {
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] bg-rose-50 text-rose-800 font-bold px-2 py-0.5 rounded uppercase border border-rose-100">
-                  {selectedDetailNote.analysisResult?.wineStyle === 'white' ? '🥂 화이트 와인' : selectedDetailNote.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인/스파클링' : selectedDetailNote.analysisResult?.wineStyle === 'desert' ? '🍯 디저트 와인' : '🍷 레드 와인'}
+                  {selectedDetailNote.liquorType !== 'wine' ? `${(LIQUOR_CONFIG[selectedDetailNote.liquorType] || LIQUOR_CONFIG.wine).icon} ${(LIQUOR_CONFIG[selectedDetailNote.liquorType] || LIQUOR_CONFIG.wine).name}` : selectedDetailNote.analysisResult?.wineStyle === 'white' ? '🥂 화이트 와인' : selectedDetailNote.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인/스파클링' : selectedDetailNote.analysisResult?.wineStyle === 'desert' ? '🍯 디저트 와인' : '🍷 레드 와인'}
                 </span>
                 <h3 className="font-black text-xl text-gray-900 mt-1 leading-tight">{selectedDetailNote.analysisResult?.name}</h3>
               </div>
@@ -3004,7 +3037,7 @@ export default function TastingApp() {
                   <span className="text-indigo-600 font-mono">{(selectedDetailNote.totalCommunityScore || 0).toFixed(1)} 점</span>
                 </div>
                 <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden shadow-inner">
-                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full" style={{ width: `${Math.min(100, ((selectedDetailNote.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full" style={{ width: `${Math.min(100, ((selectedDetailNote.totalCommunityScore || 0) / maxCommunityScore) * 100)}%` }}></div>
                 </div>
               </div>
 

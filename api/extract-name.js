@@ -1,3 +1,5 @@
+import { requireAuth } from './_lib/auth.js';
+
 // api/extract-name.js
 // 캐싱용 가벼운 호출: 사진에서 "제품 이름"만 빠르게 추출한다.
 // 출력이 짧아 비용이 적고, 이 이름으로 공용 카탈로그에 이미 있는 와인인지 확인한다.
@@ -6,6 +8,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // 🔒 로그인(구글 계정) 검증 — 토큰 없거나 무효면 여기서 401/403 응답 후 종료
+  const authedUser = await requireAuth(req, res);
+  if (!authedUser) return;
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {

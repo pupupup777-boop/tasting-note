@@ -1,3 +1,5 @@
+import { requireAuth } from './_lib/auth.js';
+
 // api/analyze.js
 // 라벨 이미지 분석용 서버 함수 (Gemini 키를 서버에만 보관)
 
@@ -5,6 +7,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // 🔒 로그인(구글 계정) 검증 — 토큰 없거나 무효면 여기서 401/403 응답 후 종료
+  const authedUser = await requireAuth(req, res);
+  if (!authedUser) return;
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {

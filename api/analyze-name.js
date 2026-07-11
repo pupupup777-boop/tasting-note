@@ -1,3 +1,5 @@
+import { requireAuth } from './_lib/auth.js';
+
 // api/analyze-name.js
 // 사진 대신 "이름"으로 주류 정보를 채운다.
 // 1) 빠른 구조화 출력(responseSchema, 구글검색 없음)으로 우선 시도 — 빠르고 503 적음
@@ -40,6 +42,10 @@ function parseJson(raw) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // 🔒 로그인(구글 계정) 검증 — 토큰 없거나 무효면 여기서 401/403 응답 후 종료
+  const authedUser = await requireAuth(req, res);
+  if (!authedUser) return;
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) return res.status(500).json({ error: 'Server API key not configured' });

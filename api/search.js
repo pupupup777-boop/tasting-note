@@ -1,3 +1,5 @@
+import { requireAuth } from './_lib/auth.js';
+
 // api/search.js
 // 보틀 백과 & 시세 검색용 서버 함수 (Gemini 키를 서버에만 보관)
 // 브라우저는 이 함수를 부르고, 이 함수가 키를 들고 구글을 대신 호출한다.
@@ -7,6 +9,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // 🔒 로그인(구글 계정) 검증 — 토큰 없거나 무효면 여기서 401/403 응답 후 종료
+  const authedUser = await requireAuth(req, res);
+  if (!authedUser) return;
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
@@ -69,8 +75,18 @@ export default async function handler(req, res) {
         return res.status(502).json({ error: 'Empty response from Gemini' });
       }
 
+      // ⚠️ 파싱 실패가 catch로 떨어지면 비싼 검색 호출을 통째로 재시도하던 낭비 수정:
+      //    여기서 직접 파싱하고, 실패하면 본문 속 JSON 블록을 건져낸 뒤, 그래도 안 되면 재호출 없이 502.
       const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
+      let parsed = null;
+      try { parsed = JSON.parse(cleaned); }
+      catch {
+        const m = cleaned.match(/\{[\s\S]*\}/); // 설명 문장 사이에 낀 JSON 덩어리 구출
+        if (m) { try { parsed = JSON.parse(m[0]); } catch { /* ignore */ } }
+      }
+      if (!parsed) {
+        return res.status(502).json({ error: 'Bad AI response format' });
+      }
       return res.status(200).json(parsed);
 
     } catch (err) {

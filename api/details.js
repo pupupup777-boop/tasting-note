@@ -1,3 +1,5 @@
+import { requireAuth } from './_lib/auth.js';
+
 // api/details.js
 // 라벨 분석 후 "자세한 정보"용 — 역사/특징/테이스팅 (금액·시세 제외, 그래서 캐싱 가능)
 // google_search로 정확도를 높이고 503은 재시도.
@@ -6,6 +8,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // 🔒 로그인(구글 계정) 검증 — 토큰 없거나 무효면 여기서 401/403 응답 후 종료
+  const authedUser = await requireAuth(req, res);
+  if (!authedUser) return;
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
@@ -65,8 +71,17 @@ export default async function handler(req, res) {
         return res.status(502).json({ error: 'Empty response from Gemini' });
       }
 
+      // ⚠️ 파싱 실패 시 비싼 grounded 호출을 재시도하던 낭비 수정 (search.js와 동일 처리)
       const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
+      let parsed = null;
+      try { parsed = JSON.parse(cleaned); }
+      catch {
+        const m = cleaned.match(/\{[\s\S]*\}/);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch { /* ignore */ } }
+      }
+      if (!parsed) {
+        return res.status(502).json({ error: 'Bad AI response format' });
+      }
       return res.status(200).json(parsed);
 
     } catch (err) {

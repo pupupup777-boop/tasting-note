@@ -1,3 +1,5 @@
+import { requireAuth } from './_lib/auth.js';
+
 // api/insights.js
 // 취향분석 AI. mode='taste'(내 취향 총평) 또는 mode='recommend'(취향 밖 다른 스타일 추천).
 // 사용자가 매긴 점수(overallRating)와 맛 지표(ratings), 아로마에 가중치를 두고 분석한다.
@@ -6,6 +8,10 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // 🔒 로그인(구글 계정) 검증 — 토큰 없거나 무효면 여기서 401/403 응답 후 종료
+  const authedUser = await requireAuth(req, res);
+  if (!authedUser) return;
 
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) {
