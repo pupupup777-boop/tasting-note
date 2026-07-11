@@ -261,143 +261,154 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
 
 // 🍷 주종/스타일별 잔 모양 정의 (viewBox 0 0 200 250 기준)
 const GLASS_CONFIG = {
-  red: { color: '#6B1F38',
+  red: { deep: '#4A0E22', light: '#93264A', surf: '#B5476E',
     outline: 'M 75 40 C 40 40, 25 120, 100 160 C 175 120, 160 40, 125 40 M 100 160 L 100 230 M 65 230 L 135 230',
     fillPath: 'M 75 40 C 40 40, 25 120, 100 160 C 175 120, 160 40, 125 40 Z', top: 40, bottom: 160 },
-  white: { color: '#E9CE74',
+  white: { deep: '#D7A93C', light: '#F1DC8C', surf: '#F8ECBA',
     outline: 'M 65 40 C 65 80, 50 140, 100 150 C 150 140, 135 80, 135 40 M 100 150 L 100 230 M 70 230 L 130 230',
     fillPath: 'M 65 40 C 65 80, 50 140, 100 150 C 150 140, 135 80, 135 40 Z', top: 40, bottom: 150 },
-  champagne: { color: '#EBD27A', bubbles: true,
+  champagne: { deep: '#DFB94E', light: '#F6E7A2', surf: '#FBF2C8', bubbles: true, bubbleCols: [95, 99, 103, 97, 101, 105, 98, 102],
     outline: 'M 75 30 L 75 90 C 75 150, 85 160, 100 160 C 115 160, 125 150, 125 90 L 125 30 M 100 160 L 100 230 M 70 230 L 130 230',
     fillPath: 'M 75 30 L 75 90 C 75 150, 85 160, 100 160 C 115 160, 125 150, 125 90 L 125 30 Z', top: 30, bottom: 160 },
-  desert: { color: '#D98E2B',
+  desert: { deep: '#A85A0C', light: '#E3A344', surf: '#EFC176',
     outline: 'M 70 80 C 70 100, 55 130, 100 140 C 145 130, 130 100, 130 80 M 100 140 L 100 230 M 70 230 L 130 230',
     fillPath: 'M 70 80 C 70 100, 55 130, 100 140 C 145 130, 130 100, 130 80 Z', top: 80, bottom: 140 },
-  whiskey: { color: '#B5651D', ice: true,
-    outline: 'M 60 80 L 70 230 L 130 230 L 140 80 M 68 215 L 132 215',
-    fillPath: 'M 60 80 L 68 215 L 132 215 L 140 80 Z', top: 80, bottom: 215 },
-  sake: { color: '#EAE3C8',
+  whiskey: { deep: '#8A4508', light: '#D89A35', surf: '#EDBC63', ice: true,
+    outline: 'M 55 125 L 64 230 L 136 230 L 145 125 M 63 210 L 137 210',
+    fillPath: 'M 55 125 L 63 210 L 137 210 L 145 125 Z', top: 125, bottom: 210 },
+  sake: { deep: '#DDD3B2', light: '#F3EEDC', surf: '#FAF7EC',
     outline: 'M 60 140 C 60 180, 80 210, 100 210 C 120 210, 140 180, 140 140 M 85 210 L 80 230 L 120 230 L 115 210',
     fillPath: 'M 60 140 C 60 180, 80 210, 100 210 C 120 210, 140 180, 140 140 Z', top: 140, bottom: 210 },
-  beer: { color: '#D98F1A', foam: true,
+  beer: { deep: '#C0770E', light: '#F0B93F', surf: '#F6CE6E', foam: true, bubbles: true, bubbleCols: [65, 78, 90, 102, 114, 70, 96, 110],
     outline: 'M 55 50 L 55 230 L 125 230 L 125 50 M 55 210 L 125 210 M 125 80 C 165 80, 165 180, 125 180 M 125 100 C 145 100, 145 160, 125 160',
     fillPath: 'M 55 50 L 55 210 L 125 210 L 125 50 Z', top: 50, bottom: 210 }
 };
 
 // 🍷 종합 만족도: 점수에 따라 잔에 술이 차오르는 시각화 + 슬라이더
+// ✨ 리디자인: 유리 질감(은은한 라인+광택), 액체 그라데이션+수면 표현, 부드러운 차오름,
+//    낮은 위스키 온더락 잔 + 잔잔한 얼음, 샴페인/맥주 기포, 맥주 크림 거품, 바닥 그림자
 const WineGlassRating = ({ score, onChange, glassType }) => {
   const g = GLASS_CONFIG[glassType] || GLASS_CONFIG.red;
   const v = score || 50;
-  const [sloshing, setSloshing] = useState(false);
-  const settleRef = useRef(null);
-  const rawId = useId();
-  const clipId = 'glassclip-' + rawId.replace(/[^a-zA-Z0-9]/g, '');
-  const STROKE = '#2d3748';
+  const rawId = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const clipId = 'gc' + rawId, liqId = 'gl' + rawId, edgeId = 'ge' + rawId, blurId = 'gb' + rawId, blur2Id = 'gb2' + rawId;
 
   const fullH = g.bottom - g.top;
   const fillRatio = g.foam ? (v / 100) * 0.82 : v / 100;
-  const h = Math.round(fullH * fillRatio);
+  const h = Math.max(0, Math.round(fullH * fillRatio));
   const topY = g.bottom - h;
+  // 슬라이더를 움직이면 액체가 스르륵 차오르는 트랜지션
+  const fillTransition = { transition: 'y .45s cubic-bezier(.25,.8,.3,1), height .45s cubic-bezier(.25,.8,.3,1), cy .45s cubic-bezier(.25,.8,.3,1)' };
 
-  useEffect(() => () => clearTimeout(settleRef.current), []);
-
-  const handleChange = (e) => {
-    onChange(Number(e.target.value));
-    setSloshing(true);
-    clearTimeout(settleRef.current);
-    settleRef.current = setTimeout(() => setSloshing(false), 700);
-  };
-
-  // 샴페인 기포
-  const champagneBubbles = [];
+  // 기포 (샴페인·맥주 공용, 잔 폭에 맞는 컬럼 사용)
+  const bubbleEls = [];
   if (g.bubbles && v >= 6) {
-    const cols = [97, 100, 103, 98, 102];
-    for (let i = 0; i < 5; i++) {
-      const sy = g.bottom - 4 - (i * ((g.bottom - topY) / 6));
-      if (sy < topY) continue;
-      const dur = 2.2 + i * 0.35;
-      champagneBubbles.push(
-        <circle key={'cb' + i} cx={cols[i]} cy={sy} r={i % 2 ? 1 : 1.4} fill="#fff8e0" opacity="0.85">
+    const cols = g.bubbleCols || [95, 99, 103, 97, 101, 105, 98, 102];
+    for (let i = 0; i < cols.length; i++) {
+      const sy = g.bottom - 4 - (i * (h / 9 || 1));
+      if (sy <= topY + 3) continue;
+      const dur = 1.8 + i * 0.28;
+      bubbleEls.push(
+        <circle key={'bub' + i} cx={cols[i]} cy={sy} r={i % 3 === 0 ? 1.3 : 0.9} fill="#FFFBE8" opacity="0.9">
           <animate attributeName="cy" from={sy} to={topY + 3} dur={dur + 's'} repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0;0.85;0" dur={dur + 's'} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0;0.9;0" dur={dur + 's'} repeatCount="indefinite" />
         </circle>
       );
     }
   }
 
-  // 맥주 거품 + 탄산
+  // 맥주 크림 거품 (두 겹 + 몽글몽글 방울)
   let foamGroup = null;
   if (g.foam) {
-    const foamH = Math.round(fullH * (v / 100) * 0.18) + 8;
-    const surfY = topY - foamH;
-    const blobDefs = [[70, 5, 0], [82, 6, 0.6], [94, 5.5, 1.2], [106, 6, 0.4], [118, 5, 1.5], [76, 4, 0.9], [100, 4.5, 0.3], [112, 4, 1.1]];
-    const carbon = [];
-    const ccols = [74, 90, 106, 82, 98];
-    for (let j = 0; j < 5; j++) {
-      const sy2 = g.bottom - 6 - j * 8;
-      if (sy2 < topY) continue;
-      const dur = 2.0 + j * 0.3;
-      carbon.push(
-        <circle key={'car' + j} cx={ccols[j]} cy={sy2} r={1.2} fill="#fff6cf" opacity="0.85">
-          <animate attributeName="cy" from={sy2} to={topY + 2} dur={dur + 's'} repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0;0.85;0" dur={dur + 's'} repeatCount="indefinite" />
-        </circle>
-      );
-    }
+    const foamH = Math.round(fullH * (v / 100) * 0.16) + 7;
+    const fy = topY - foamH;
+    const blobDefs = [[68, 5, 0], [81, 6, 0.6], [94, 5.5, 1.2], [107, 6, 0.4], [118, 4.5, 1.5], [74, 3.5, 0.9], [100, 4, 0.3], [113, 3.5, 1.1]];
     foamGroup = (
       <g clipPath={`url(#${clipId})`}>
-        {carbon}
-        <rect x="20" width="160" y={surfY} height={foamH + 2} fill="#FBF4DE" />
+        <rect x="18" width="164" y={fy} height={foamH + 2} fill="#FBF3DC" />
+        <rect x="18" width="164" y={fy} height={Math.max(2, foamH * 0.45)} fill="#FFFDF6" />
         {blobDefs.map((b, i) => (
-          <circle key={'fb' + i} cx={b[0]} cy={surfY} r={b[1]} fill="#FFFDF5">
-            <animate attributeName="cy" values={`${surfY};${surfY - 3};${surfY + 1.5};${surfY}`} dur={(2.6 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
-            <animate attributeName="r" values={`${b[1]};${b[1] + 1.2};${b[1] - 0.6};${b[1]}`} dur={(3.1 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
+          <circle key={'fb' + i} cx={b[0]} cy={fy} r={b[1]} fill="#FFFEF9">
+            <animate attributeName="cy" values={`${fy};${fy - 3};${fy + 1.5};${fy}`} dur={(2.6 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
           </circle>
         ))}
+        <ellipse cx="100" cy={fy + foamH + 1} rx="62" ry="3" fill="#E9D9A8" opacity="0.55" />
       </g>
     );
   }
 
-  // 위스키 얼음 (수면 위에 떠서 슬라이드 시 출렁, 멈추면 정착)
-  const renderIce = (cx, cy, s, rot, key) => (
-    <g key={key}>
-      <rect x={cx - s / 2} y={cy - s / 2} width={s} height={s} rx="3"
-        fill="#ffffff" opacity="0.34" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1"
-        transform={`rotate(${rot} ${cx} ${cy})`} />
-      {sloshing && (
-        <animateTransform attributeName="transform" type="translate"
-          values="0 0; 0 -2.5; 0 1.2; 0 -0.6; 0 0" dur="0.9s" repeatCount="indefinite" />
-      )}
-    </g>
-  );
+  // 위스키 얼음: 반투명 라운드 큐브, 아주 느리고 잔잔하게 둥실 (액체와 따로 놀지 않게)
   let iceGroup = null;
-  if (g.ice && h > 14) {
-    const surfaceY = topY + 8;
-    const ices = [renderIce(85, surfaceY, 20, 16, 'ice1')];
-    if (h > 30) ices.push(renderIce(112, surfaceY + 5, 17, -13, 'ice2'));
-    iceGroup = <g clipPath={`url(#${clipId})`}>{ices}</g>;
+  if (g.ice && h > 16) {
+    const sy = topY + 10;
+    const cube = (cx, cy, s, rot, d, key) => (
+      <g key={key} transform={`rotate(${rot} ${cx} ${cy})`}>
+        <rect x={cx - s / 2} y={cy - s / 2} width={s} height={s} rx="5"
+          fill="#ffffff" opacity="0.30" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="1.2" />
+        <rect x={cx - s / 2 + 3} y={cy - s / 2 + 3} width={s * 0.45} height={s * 0.35} rx="2.5" fill="#ffffff" opacity="0.5" />
+        <animateTransform attributeName="transform" type="translate" additive="sum"
+          values="0 0; 0 -1; 0 0.5; 0 0" dur={d + 's'} repeatCount="indefinite" />
+      </g>
+    );
+    iceGroup = (
+      <g clipPath={`url(#${clipId})`}>
+        {cube(85, sy, 24, 10, 7, 'ice1')}
+        {h > 34 && cube(114, sy + 7, 18, -8, 8.2, 'ice2')}
+      </g>
+    );
   }
+
+  // 유리 광택 곡선 (보울 높이에 맞춤)
+  const gt = g.top, gb = g.bottom, gm = (gt + gb) / 2;
+  const shineL = `M 72 ${gt + 12} C 62 ${gm - 10}, 62 ${gm + 10}, 74 ${gb - 12}`;
+  const shineS = `M 80 ${gt + 8} C 74 ${gt + 26}, 73 ${gt + 34}, 78 ${gt + 46}`;
 
   return (
     <div>
-      <div className="flex justify-center items-end mb-3" style={{ height: 250 }}>
-        <svg width="200" height="250" viewBox="0 0 200 250" role="img" aria-label="만족도 잔">
+      <div className="flex justify-center items-end mb-3" style={{ height: 252 }}>
+        <svg width="200" height="252" viewBox="0 0 200 252" role="img" aria-label="만족도 잔">
           <defs>
+            <linearGradient id={liqId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={g.light} />
+              <stop offset="100%" stopColor={g.deep} />
+            </linearGradient>
+            <linearGradient id={edgeId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#cbd5e1" />
+              <stop offset="55%" stopColor="#94a3b8" />
+              <stop offset="100%" stopColor="#64748b" />
+            </linearGradient>
             <clipPath id={clipId}><path d={g.fillPath} /></clipPath>
+            <filter id={blurId} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.4" /></filter>
+            <filter id={blur2Id} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" /></filter>
           </defs>
 
-          {/* 채워지는 술 */}
-          <rect x="20" width="160" y={topY} height={h} clipPath={`url(#${clipId})`} fill={g.color} />
+          {/* 바닥 그림자 */}
+          <ellipse cx="100" cy="238" rx="46" ry="6" fill="#0f172a" opacity="0.10" filter={`url(#${blur2Id})`} />
 
-          {champagneBubbles.length > 0 && <g clipPath={`url(#${clipId})`}>{champagneBubbles}</g>}
+          {/* 유리 몸체(빈 잔) 틴트 */}
+          <path d={g.fillPath} fill="#e2e8f0" opacity="0.28" />
+          <path d={g.fillPath} fill="#ffffff" opacity="0.10" />
+
+          {/* 액체: 그라데이션 + 수면 + 기포 */}
+          <g clipPath={`url(#${clipId})`}>
+            <rect x="18" width="164" y={topY} height={h + 2} fill={`url(#${liqId})`} style={fillTransition} />
+            <ellipse cx="100" cy={topY} rx="62" ry="4.5" fill={g.surf} opacity="0.95" style={fillTransition} />
+            <ellipse cx="100" cy={topY - 0.5} rx="62" ry="2" fill="#ffffff" opacity="0.30" style={fillTransition} />
+            {bubbleEls}
+          </g>
+
           {foamGroup}
           {iceGroup}
 
-          {/* 유리 광택 */}
-          <rect x="20" width="22" y={g.top} height={g.bottom - g.top} clipPath={`url(#${clipId})`} fill="#ffffff" opacity="0.14" />
+          {/* 유리 광택 스트릭 */}
+          <g clipPath={`url(#${clipId})`}>
+            <path d={shineL} fill="none" stroke="#ffffff" strokeWidth="5" strokeLinecap="round" opacity="0.30" filter={`url(#${blurId})`} />
+            <path d={shineS} fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" opacity="0.45" filter={`url(#${blurId})`} />
+          </g>
 
-          {/* 잔 외곽선 (제미나이 라인아트) */}
-          <path d={g.outline} fill="none" stroke={STROKE} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          {/* 잔 외곽선: 얇고 은은한 유리 라인 */}
+          <path d={g.outline} fill="none" stroke={`url(#${edgeId})`} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={g.outline} fill="none" stroke="#ffffff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" transform="translate(-0.6,-0.6)" />
         </svg>
       </div>
 
@@ -406,7 +417,7 @@ const WineGlassRating = ({ score, onChange, glassType }) => {
         min="1"
         max="100"
         value={v}
-        onChange={handleChange}
+        onChange={(e) => onChange(Number(e.target.value))}
         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-800"
       />
       <div className="flex justify-between text-[10px] text-gray-400 font-bold px-1 mt-1.5 font-mono">
