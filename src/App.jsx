@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc, getDocs, runTransaction } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, arrayUnion, getDoc, deleteDoc, getDocs } from 'firebase/firestore';
 
 const FIREBASE_API_KEY = import.meta.env.VITE_FIREBASE_API_KEY || "";
 
@@ -261,154 +261,143 @@ const FractionalStarRating = ({ value, onChange, onSave }) => {
 
 // 🍷 주종/스타일별 잔 모양 정의 (viewBox 0 0 200 250 기준)
 const GLASS_CONFIG = {
-  red: { deep: '#4A0E22', light: '#93264A', surf: '#B5476E',
+  red: { color: '#6B1F38',
     outline: 'M 75 40 C 40 40, 25 120, 100 160 C 175 120, 160 40, 125 40 M 100 160 L 100 230 M 65 230 L 135 230',
     fillPath: 'M 75 40 C 40 40, 25 120, 100 160 C 175 120, 160 40, 125 40 Z', top: 40, bottom: 160 },
-  white: { deep: '#D7A93C', light: '#F1DC8C', surf: '#F8ECBA',
+  white: { color: '#E9CE74',
     outline: 'M 65 40 C 65 80, 50 140, 100 150 C 150 140, 135 80, 135 40 M 100 150 L 100 230 M 70 230 L 130 230',
     fillPath: 'M 65 40 C 65 80, 50 140, 100 150 C 150 140, 135 80, 135 40 Z', top: 40, bottom: 150 },
-  champagne: { deep: '#DFB94E', light: '#F6E7A2', surf: '#FBF2C8', bubbles: true, bubbleCols: [95, 99, 103, 97, 101, 105, 98, 102],
+  champagne: { color: '#EBD27A', bubbles: true,
     outline: 'M 75 30 L 75 90 C 75 150, 85 160, 100 160 C 115 160, 125 150, 125 90 L 125 30 M 100 160 L 100 230 M 70 230 L 130 230',
     fillPath: 'M 75 30 L 75 90 C 75 150, 85 160, 100 160 C 115 160, 125 150, 125 90 L 125 30 Z', top: 30, bottom: 160 },
-  desert: { deep: '#A85A0C', light: '#E3A344', surf: '#EFC176',
+  desert: { color: '#D98E2B',
     outline: 'M 70 80 C 70 100, 55 130, 100 140 C 145 130, 130 100, 130 80 M 100 140 L 100 230 M 70 230 L 130 230',
     fillPath: 'M 70 80 C 70 100, 55 130, 100 140 C 145 130, 130 100, 130 80 Z', top: 80, bottom: 140 },
-  whiskey: { deep: '#8A4508', light: '#D89A35', surf: '#EDBC63', ice: true,
-    outline: 'M 55 125 L 64 230 L 136 230 L 145 125 M 63 210 L 137 210',
-    fillPath: 'M 55 125 L 63 210 L 137 210 L 145 125 Z', top: 125, bottom: 210 },
-  sake: { deep: '#DDD3B2', light: '#F3EEDC', surf: '#FAF7EC',
+  whiskey: { color: '#B5651D', ice: true,
+    outline: 'M 60 80 L 70 230 L 130 230 L 140 80 M 68 215 L 132 215',
+    fillPath: 'M 60 80 L 68 215 L 132 215 L 140 80 Z', top: 80, bottom: 215 },
+  sake: { color: '#EAE3C8',
     outline: 'M 60 140 C 60 180, 80 210, 100 210 C 120 210, 140 180, 140 140 M 85 210 L 80 230 L 120 230 L 115 210',
     fillPath: 'M 60 140 C 60 180, 80 210, 100 210 C 120 210, 140 180, 140 140 Z', top: 140, bottom: 210 },
-  beer: { deep: '#C0770E', light: '#F0B93F', surf: '#F6CE6E', foam: true, bubbles: true, bubbleCols: [65, 78, 90, 102, 114, 70, 96, 110],
+  beer: { color: '#D98F1A', foam: true,
     outline: 'M 55 50 L 55 230 L 125 230 L 125 50 M 55 210 L 125 210 M 125 80 C 165 80, 165 180, 125 180 M 125 100 C 145 100, 145 160, 125 160',
     fillPath: 'M 55 50 L 55 210 L 125 210 L 125 50 Z', top: 50, bottom: 210 }
 };
 
 // 🍷 종합 만족도: 점수에 따라 잔에 술이 차오르는 시각화 + 슬라이더
-// ✨ 리디자인: 유리 질감(은은한 라인+광택), 액체 그라데이션+수면 표현, 부드러운 차오름,
-//    낮은 위스키 온더락 잔 + 잔잔한 얼음, 샴페인/맥주 기포, 맥주 크림 거품, 바닥 그림자
 const WineGlassRating = ({ score, onChange, glassType }) => {
   const g = GLASS_CONFIG[glassType] || GLASS_CONFIG.red;
   const v = score || 50;
-  const rawId = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const clipId = 'gc' + rawId, liqId = 'gl' + rawId, edgeId = 'ge' + rawId, blurId = 'gb' + rawId, blur2Id = 'gb2' + rawId;
+  const [sloshing, setSloshing] = useState(false);
+  const settleRef = useRef(null);
+  const rawId = useId();
+  const clipId = 'glassclip-' + rawId.replace(/[^a-zA-Z0-9]/g, '');
+  const STROKE = '#2d3748';
 
   const fullH = g.bottom - g.top;
   const fillRatio = g.foam ? (v / 100) * 0.82 : v / 100;
-  const h = Math.max(0, Math.round(fullH * fillRatio));
+  const h = Math.round(fullH * fillRatio);
   const topY = g.bottom - h;
-  // 슬라이더를 움직이면 액체가 스르륵 차오르는 트랜지션
-  const fillTransition = { transition: 'y .45s cubic-bezier(.25,.8,.3,1), height .45s cubic-bezier(.25,.8,.3,1), cy .45s cubic-bezier(.25,.8,.3,1)' };
 
-  // 기포 (샴페인·맥주 공용, 잔 폭에 맞는 컬럼 사용)
-  const bubbleEls = [];
+  useEffect(() => () => clearTimeout(settleRef.current), []);
+
+  const handleChange = (e) => {
+    onChange(Number(e.target.value));
+    setSloshing(true);
+    clearTimeout(settleRef.current);
+    settleRef.current = setTimeout(() => setSloshing(false), 700);
+  };
+
+  // 샴페인 기포
+  const champagneBubbles = [];
   if (g.bubbles && v >= 6) {
-    const cols = g.bubbleCols || [95, 99, 103, 97, 101, 105, 98, 102];
-    for (let i = 0; i < cols.length; i++) {
-      const sy = g.bottom - 4 - (i * (h / 9 || 1));
-      if (sy <= topY + 3) continue;
-      const dur = 1.8 + i * 0.28;
-      bubbleEls.push(
-        <circle key={'bub' + i} cx={cols[i]} cy={sy} r={i % 3 === 0 ? 1.3 : 0.9} fill="#FFFBE8" opacity="0.9">
+    const cols = [97, 100, 103, 98, 102];
+    for (let i = 0; i < 5; i++) {
+      const sy = g.bottom - 4 - (i * ((g.bottom - topY) / 6));
+      if (sy < topY) continue;
+      const dur = 2.2 + i * 0.35;
+      champagneBubbles.push(
+        <circle key={'cb' + i} cx={cols[i]} cy={sy} r={i % 2 ? 1 : 1.4} fill="#fff8e0" opacity="0.85">
           <animate attributeName="cy" from={sy} to={topY + 3} dur={dur + 's'} repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0;0.9;0" dur={dur + 's'} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0;0.85;0" dur={dur + 's'} repeatCount="indefinite" />
         </circle>
       );
     }
   }
 
-  // 맥주 크림 거품 (두 겹 + 몽글몽글 방울)
+  // 맥주 거품 + 탄산
   let foamGroup = null;
   if (g.foam) {
-    const foamH = Math.round(fullH * (v / 100) * 0.16) + 7;
-    const fy = topY - foamH;
-    const blobDefs = [[68, 5, 0], [81, 6, 0.6], [94, 5.5, 1.2], [107, 6, 0.4], [118, 4.5, 1.5], [74, 3.5, 0.9], [100, 4, 0.3], [113, 3.5, 1.1]];
+    const foamH = Math.round(fullH * (v / 100) * 0.18) + 8;
+    const surfY = topY - foamH;
+    const blobDefs = [[70, 5, 0], [82, 6, 0.6], [94, 5.5, 1.2], [106, 6, 0.4], [118, 5, 1.5], [76, 4, 0.9], [100, 4.5, 0.3], [112, 4, 1.1]];
+    const carbon = [];
+    const ccols = [74, 90, 106, 82, 98];
+    for (let j = 0; j < 5; j++) {
+      const sy2 = g.bottom - 6 - j * 8;
+      if (sy2 < topY) continue;
+      const dur = 2.0 + j * 0.3;
+      carbon.push(
+        <circle key={'car' + j} cx={ccols[j]} cy={sy2} r={1.2} fill="#fff6cf" opacity="0.85">
+          <animate attributeName="cy" from={sy2} to={topY + 2} dur={dur + 's'} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0;0.85;0" dur={dur + 's'} repeatCount="indefinite" />
+        </circle>
+      );
+    }
     foamGroup = (
       <g clipPath={`url(#${clipId})`}>
-        <rect x="18" width="164" y={fy} height={foamH + 2} fill="#FBF3DC" />
-        <rect x="18" width="164" y={fy} height={Math.max(2, foamH * 0.45)} fill="#FFFDF6" />
+        {carbon}
+        <rect x="20" width="160" y={surfY} height={foamH + 2} fill="#FBF4DE" />
         {blobDefs.map((b, i) => (
-          <circle key={'fb' + i} cx={b[0]} cy={fy} r={b[1]} fill="#FFFEF9">
-            <animate attributeName="cy" values={`${fy};${fy - 3};${fy + 1.5};${fy}`} dur={(2.6 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
+          <circle key={'fb' + i} cx={b[0]} cy={surfY} r={b[1]} fill="#FFFDF5">
+            <animate attributeName="cy" values={`${surfY};${surfY - 3};${surfY + 1.5};${surfY}`} dur={(2.6 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
+            <animate attributeName="r" values={`${b[1]};${b[1] + 1.2};${b[1] - 0.6};${b[1]}`} dur={(3.1 + b[2]) + 's'} repeatCount="indefinite" begin={b[2] + 's'} />
           </circle>
         ))}
-        <ellipse cx="100" cy={fy + foamH + 1} rx="62" ry="3" fill="#E9D9A8" opacity="0.55" />
       </g>
     );
   }
 
-  // 위스키 얼음: 반투명 라운드 큐브, 아주 느리고 잔잔하게 둥실 (액체와 따로 놀지 않게)
+  // 위스키 얼음 (수면 위에 떠서 슬라이드 시 출렁, 멈추면 정착)
+  const renderIce = (cx, cy, s, rot, key) => (
+    <g key={key}>
+      <rect x={cx - s / 2} y={cy - s / 2} width={s} height={s} rx="3"
+        fill="#ffffff" opacity="0.34" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1"
+        transform={`rotate(${rot} ${cx} ${cy})`} />
+      {sloshing && (
+        <animateTransform attributeName="transform" type="translate"
+          values="0 0; 0 -2.5; 0 1.2; 0 -0.6; 0 0" dur="0.9s" repeatCount="indefinite" />
+      )}
+    </g>
+  );
   let iceGroup = null;
-  if (g.ice && h > 16) {
-    const sy = topY + 10;
-    const cube = (cx, cy, s, rot, d, key) => (
-      <g key={key} transform={`rotate(${rot} ${cx} ${cy})`}>
-        <rect x={cx - s / 2} y={cy - s / 2} width={s} height={s} rx="5"
-          fill="#ffffff" opacity="0.30" stroke="#ffffff" strokeOpacity="0.7" strokeWidth="1.2" />
-        <rect x={cx - s / 2 + 3} y={cy - s / 2 + 3} width={s * 0.45} height={s * 0.35} rx="2.5" fill="#ffffff" opacity="0.5" />
-        <animateTransform attributeName="transform" type="translate" additive="sum"
-          values="0 0; 0 -1; 0 0.5; 0 0" dur={d + 's'} repeatCount="indefinite" />
-      </g>
-    );
-    iceGroup = (
-      <g clipPath={`url(#${clipId})`}>
-        {cube(85, sy, 24, 10, 7, 'ice1')}
-        {h > 34 && cube(114, sy + 7, 18, -8, 8.2, 'ice2')}
-      </g>
-    );
+  if (g.ice && h > 14) {
+    const surfaceY = topY + 8;
+    const ices = [renderIce(85, surfaceY, 20, 16, 'ice1')];
+    if (h > 30) ices.push(renderIce(112, surfaceY + 5, 17, -13, 'ice2'));
+    iceGroup = <g clipPath={`url(#${clipId})`}>{ices}</g>;
   }
-
-  // 유리 광택 곡선 (보울 높이에 맞춤)
-  const gt = g.top, gb = g.bottom, gm = (gt + gb) / 2;
-  const shineL = `M 72 ${gt + 12} C 62 ${gm - 10}, 62 ${gm + 10}, 74 ${gb - 12}`;
-  const shineS = `M 80 ${gt + 8} C 74 ${gt + 26}, 73 ${gt + 34}, 78 ${gt + 46}`;
 
   return (
     <div>
-      <div className="flex justify-center items-end mb-3" style={{ height: 252 }}>
-        <svg width="200" height="252" viewBox="0 0 200 252" role="img" aria-label="만족도 잔">
+      <div className="flex justify-center items-end mb-3" style={{ height: 250 }}>
+        <svg width="200" height="250" viewBox="0 0 200 250" role="img" aria-label="만족도 잔">
           <defs>
-            <linearGradient id={liqId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={g.light} />
-              <stop offset="100%" stopColor={g.deep} />
-            </linearGradient>
-            <linearGradient id={edgeId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#cbd5e1" />
-              <stop offset="55%" stopColor="#94a3b8" />
-              <stop offset="100%" stopColor="#64748b" />
-            </linearGradient>
             <clipPath id={clipId}><path d={g.fillPath} /></clipPath>
-            <filter id={blurId} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.4" /></filter>
-            <filter id={blur2Id} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" /></filter>
           </defs>
 
-          {/* 바닥 그림자 */}
-          <ellipse cx="100" cy="238" rx="46" ry="6" fill="#0f172a" opacity="0.10" filter={`url(#${blur2Id})`} />
+          {/* 채워지는 술 */}
+          <rect x="20" width="160" y={topY} height={h} clipPath={`url(#${clipId})`} fill={g.color} />
 
-          {/* 유리 몸체(빈 잔) 틴트 */}
-          <path d={g.fillPath} fill="#e2e8f0" opacity="0.28" />
-          <path d={g.fillPath} fill="#ffffff" opacity="0.10" />
-
-          {/* 액체: 그라데이션 + 수면 + 기포 */}
-          <g clipPath={`url(#${clipId})`}>
-            <rect x="18" width="164" y={topY} height={h + 2} fill={`url(#${liqId})`} style={fillTransition} />
-            <ellipse cx="100" cy={topY} rx="62" ry="4.5" fill={g.surf} opacity="0.95" style={fillTransition} />
-            <ellipse cx="100" cy={topY - 0.5} rx="62" ry="2" fill="#ffffff" opacity="0.30" style={fillTransition} />
-            {bubbleEls}
-          </g>
-
+          {champagneBubbles.length > 0 && <g clipPath={`url(#${clipId})`}>{champagneBubbles}</g>}
           {foamGroup}
           {iceGroup}
 
-          {/* 유리 광택 스트릭 */}
-          <g clipPath={`url(#${clipId})`}>
-            <path d={shineL} fill="none" stroke="#ffffff" strokeWidth="5" strokeLinecap="round" opacity="0.30" filter={`url(#${blurId})`} />
-            <path d={shineS} fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" opacity="0.45" filter={`url(#${blurId})`} />
-          </g>
+          {/* 유리 광택 */}
+          <rect x="20" width="22" y={g.top} height={g.bottom - g.top} clipPath={`url(#${clipId})`} fill="#ffffff" opacity="0.14" />
 
-          {/* 잔 외곽선: 얇고 은은한 유리 라인 */}
-          <path d={g.outline} fill="none" stroke={`url(#${edgeId})`} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-          <path d={g.outline} fill="none" stroke="#ffffff" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.6" transform="translate(-0.6,-0.6)" />
+          {/* 잔 외곽선 (제미나이 라인아트) */}
+          <path d={g.outline} fill="none" stroke={STROKE} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </div>
 
@@ -417,7 +406,7 @@ const WineGlassRating = ({ score, onChange, glassType }) => {
         min="1"
         max="100"
         value={v}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onChange={handleChange}
         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-gray-800"
       />
       <div className="flex justify-between text-[10px] text-gray-400 font-bold px-1 mt-1.5 font-mono">
@@ -433,6 +422,8 @@ const WineGlassRating = ({ score, onChange, glassType }) => {
 export default function TastingApp() {
   const [user, setUser] = useState(null);
   const [notes, setNotes] = useState([]);
+  const [cellarItems, setCellarItems] = useState([]);        // 🍾 와인셀러 (내 보관 목록)
+  const [cellarConsumed, setCellarConsumed] = useState(false); // 이번 분석에서 셀러 차감했는지
   const [listSortKey, setListSortKey] = useState('latest'); // 내 노트 정렬 필터 플래그
   const [filterStyle, setFilterStyle] = useState('all'); // 와인 스타일 필터링
   const [filterRegion, setFilterRegion] = useState('all'); // 와인 지역 필터링
@@ -529,9 +520,9 @@ export default function TastingApp() {
   const processedNotes = useMemo(() => {
     let result = [...safeNotes];
 
-    // 1. 와인 스타일 필터 (⚠️ 와인 노트에만 적용 — 위스키/사케/맥주가 '레드'로 끌려오던 버그 수정)
+    // 1. 와인 스타일 필터
     if (filterStyle && filterStyle !== 'all') {
-      result = result.filter(n => n?.liquorType === 'wine' && (n?.analysisResult?.wineStyle || 'red') === filterStyle);
+      result = result.filter(n => (n?.analysisResult?.wineStyle || 'red') === filterStyle);
     }
 
     // 2. 국가 단위 필터 (영어/세부명 완벽 클렌징 매칭)
@@ -605,6 +596,23 @@ export default function TastingApp() {
     return () => unsubscribe();
   }, [user?.uid]);
 
+  // 🍾 와인셀러 구독
+  useEffect(() => {
+    if (!user?.uid) return;
+    const cellarRef = collection(db, 'artifacts', appId, 'users', user.uid, 'cellar');
+    const unsubscribe = onSnapshot(
+      query(cellarRef),
+      (snapshot) => {
+        const data = [];
+        snapshot.forEach((docSnap) => data.push({ id: docSnap.id, ...docSnap.data() }));
+        data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setCellarItems(data);
+      },
+      (err) => console.error("cellar snapshot error:", err)
+    );
+    return () => unsubscribe();
+  }, [user?.uid]);
+
   // ✅ [멈춤 핵심 수정 2/2] 내 프로필 구독 — 리스너를 단 한 번만 생성하고 정리도 보장.
   useEffect(() => {
     if (!user?.uid) return;
@@ -641,12 +649,6 @@ export default function TastingApp() {
     );
     return () => unsubscribe();
   }, [user?.uid]);
-
-  // 📊 랭킹 막대 분모용: 커뮤니티 최고 점수 (기존엔 정렬 안 된 [0]번 글을 써서 막대 폭이 틀렸음)
-  const maxCommunityScore = useMemo(
-    () => Math.max(1, ...communityPosts.map(p => p.totalCommunityScore || 0)),
-    [communityPosts]
-  );
 
   const userStats = useMemo(() => {
     const stats = {};
@@ -699,7 +701,7 @@ export default function TastingApp() {
   const resetForm = () => {
     setImage(null);
     setAnalysisResult(null);
-    setDetailsInfo(null); setDetailsSource("");
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false);
     setPrice('');
     setRatings({});
     setSelectedAromas([]);
@@ -866,7 +868,7 @@ export default function TastingApp() {
       // 키를 들고 구글을 부르는 건 서버(/api/search)가 한다. 브라우저는 검색어만 보낸다.
       const response = await fetch('/api/search', {
         method: 'POST',
-        headers: await authHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: q })
       });
 
@@ -901,7 +903,7 @@ export default function TastingApp() {
       const base64Data = base64Image.split(',')[1];
       const exRes = await fetch('/api/extract-name', {
         method: 'POST',
-        headers: await authHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Data })
       });
       if (!exRes.ok) {
@@ -976,7 +978,7 @@ export default function TastingApp() {
       // 3) AI 호출
       const res = await fetch('/api/details', {
         method: 'POST',
-        headers: await authHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: analysisResult.name })
       });
       if (!res.ok) {
@@ -1055,15 +1057,6 @@ export default function TastingApp() {
     if (!isAdmin) return '';
     if (err?.name === 'AbortError') return '  🔧[타임아웃: 응답이 너무 늦음]';
     return `  🔧[예외: ${String(err?.message || err).slice(0, 140)}]`;
-  };
-
-  // 🔒 서버 API 호출용 헤더: Firebase ID 토큰을 실어 보낸다 (서버가 로그인 여부를 검증)
-  const authHeaders = async () => {
-    const h = { 'Content-Type': 'application/json' };
-    try {
-      if (auth.currentUser) h['Authorization'] = `Bearer ${await auth.currentUser.getIdToken()}`;
-    } catch (e) { console.error("토큰 발급 실패:", e); }
-    return h;
   };
 
   const usageDocRef = () => doc(db, 'artifacts', appId, 'users', user.uid, 'meta', 'usage');
@@ -1155,7 +1148,7 @@ export default function TastingApp() {
     try {
       const res = await fetch('/api/insights', {
         method: 'POST',
-        headers: await authHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode, profile, liquorName })
       });
       if (!res.ok) {
@@ -1207,7 +1200,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null); // 새 분석 시작 시 이전 결과 초기화 (다시 찍기 대응)
-    setDetailsInfo(null); setDetailsSource("");
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false);
     const base64Data = base64Image.split(',')[1];
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1219,7 +1212,7 @@ export default function TastingApp() {
       try {
         const nameRes = await fetch('/api/extract-name', {
           method: 'POST',
-          headers: await authHeaders(),
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ base64Data })
         });
         if (nameRes.ok) {
@@ -1248,7 +1241,7 @@ export default function TastingApp() {
             setIsAnalyzing(false); // ✅ 즉시 표시
             console.log("[CACHE HIT] 카탈로그에서 불러옴 (AI 미사용):", lookupKey);
             showToast("🍷 주종을 감지했습니다!", "success");
-            // ✅ 캐시 히트는 AI를 안 썼으므로 일일 한도 차감 안 함 (details와 동일 규칙)
+            incrementLabelCount(); // 백그라운드
             return; // 🎯 비싼 상세분석 스킵
           }
         } catch (e) {
@@ -1261,7 +1254,7 @@ export default function TastingApp() {
       // ─────────────────────────────────────────────
       const response = await fetch('/api/analyze', {
         method: 'POST',
-        headers: await authHeaders(),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64Data, liquorName: config.name })
       });
 
@@ -1298,25 +1291,22 @@ export default function TastingApp() {
       incrementLabelCount(); // 카운트는 백그라운드로 (await 안 함)
 
       // 🗂️ 공용 카탈로그에 저장 (백그라운드) → 다음 사람은 AI 상세분석 없이 가져감
-      // ⚠️ 조회는 extract-name의 이름(lookupKey)으로 하는데 저장을 analyze의 이름으로만 하면
-      //    키가 달라 캐시가 안 맞았음. → 두 키(추출 이름 + 보정 이름) 모두에 저장해 다음 조회가 반드시 맞도록.
-      const catalogData = {
-        name: parsed.name || '',
-        type: parsed.type || '',
-        region: parsed.region || '',
-        vintage: parsed.vintage || '',
-        grape: parsed.grape || '',
-        producer: parsed.producer || '',
-        detectedCategory: parsed.detectedCategory || selectedLiquorType,
-        wineStyle: parsed.wineStyle || null,
-        createdAt: Date.now(),
-        firstBy: user.uid
-      };
-      const catalogKeys = [...new Set([normalizeWineName(parsed.name), lookupKey].filter(Boolean))];
-      catalogKeys.forEach((k) => {
-        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', k);
-        setDoc(catalogRef, catalogData, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
-      });
+      const saveKey = normalizeWineName(parsed.name);
+      if (saveKey) {
+        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
+        setDoc(catalogRef, {
+          name: parsed.name || '',
+          type: parsed.type || '',
+          region: parsed.region || '',
+          vintage: parsed.vintage || '',
+          grape: parsed.grape || '',
+          producer: parsed.producer || '',
+          detectedCategory: parsed.detectedCategory || selectedLiquorType,
+          wineStyle: parsed.wineStyle || null,
+          createdAt: Date.now(),
+          firstBy: user.uid
+        }, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
+      }
 
       if (shareToCommunity) {
         if (parsed.isCodeDetected) {
@@ -1347,7 +1337,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null);
-    setDetailsInfo(null); setDetailsSource("");
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false);
     setImage(null); // 사진 없이 진행
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1367,7 +1357,7 @@ export default function TastingApp() {
             setIsAnalyzing(false); // ✅ 즉시 표시
             console.log("[CACHE HIT] (이름검색):", lookupKey);
             showToast("🍷 정보를 불러왔어요!", "success");
-            // ✅ 캐시 히트는 AI를 안 썼으므로 일일 한도 차감 안 함
+            incrementLabelCount();
             setNameQuery('');
             return;
           }
@@ -1381,7 +1371,7 @@ export default function TastingApp() {
       try {
         res = await fetch('/api/analyze-name', {
           method: 'POST',
-          headers: await authHeaders(),
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: q, liquorName: config.name }),
           signal: controller.signal
         });
@@ -1423,18 +1413,16 @@ export default function TastingApp() {
       setNameQuery('');
 
       // 카탈로그 저장 (백그라운드)
-      // ⚠️ 조회키(lookupKey=입력어)와 저장키(parsed.name)가 달라 캐시 미스 나던 문제 → 두 키 모두에 저장
-      const catalogData = {
-        name: parsed.name || q, type: parsed.type || '', region: parsed.region || '',
-        vintage: parsed.vintage || '', grape: parsed.grape || '', producer: parsed.producer || '',
-        detectedCategory: parsed.detectedCategory || selectedLiquorType, wineStyle: parsed.wineStyle || null,
-        createdAt: Date.now(), firstBy: user.uid
-      };
-      const catalogKeys = [...new Set([normalizeWineName(parsed.name || q), lookupKey].filter(Boolean))];
-      catalogKeys.forEach((k) => {
-        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', k);
-        setDoc(catalogRef, catalogData, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
-      });
+      const saveKey = normalizeWineName(parsed.name || q);
+      if (saveKey) {
+        const catalogRef = doc(db, 'artifacts', appId, 'public', 'data', 'wine_catalog', saveKey);
+        setDoc(catalogRef, {
+          name: parsed.name || q, type: parsed.type || '', region: parsed.region || '',
+          vintage: parsed.vintage || '', grape: parsed.grape || '', producer: parsed.producer || '',
+          detectedCategory: parsed.detectedCategory || selectedLiquorType, wineStyle: parsed.wineStyle || null,
+          createdAt: Date.now(), firstBy: user.uid
+        }, { merge: true }).catch(e => console.error("카탈로그 저장 실패:", e));
+      }
     } catch (err) {
       setError("서버 통신 오류로 검색이 지연되고 있어요. 잠시 후 다시 시도해 주세요." + adminDiagErr(err));
       showToast("검색 실패", "error");
@@ -1519,49 +1507,51 @@ export default function TastingApp() {
 
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
     try {
-      // 🔒 트랜잭션: 항상 "지금 서버에 있는" 최신 투표 상태를 읽고 갱신 → 동시 투표해도 유실 없음
-      const txResult = await runTransaction(db, async (tx) => {
-        const snap = await tx.get(postRef);
-        if (!snap.exists()) throw new Error("post-not-found");
-        const fresh = snap.data();
+      const postSnap = communityPosts.find(p => p.id === postId);
+      if (!postSnap) return;
 
-        const currentVoters = (fresh.votes && fresh.votes.voters) || {};
-        if (currentVoters[user.uid] !== undefined) return { already: true };
+      const currentVotes = postSnap.votes || { voters: {}, yesCount: 0, noCount: 0 };
+      const currentVoters = currentVotes.voters || {};
 
-        const updatedVoters = { ...currentVoters, [user.uid]: voteValue };
-        let yesCount = 0;
-        let noCount = 0;
-        Object.values(updatedVoters).forEach(v => {
-          if (v === 'yes') yesCount++;
-          if (v === 'no') noCount++;
-        });
-
-        const totalVotes = yesCount + noCount;
-        let verificationStatus = fresh.verificationStatus || 'pending_vote';
-        if (totalVotes >= 3) {
-          verificationStatus = (yesCount / totalVotes >= 0.5) ? 'community_verified' : 'pending_vote';
-        }
-
-        tx.update(postRef, {
-          "votes.voters": updatedVoters,
-          "votes.yesCount": yesCount,
-          "votes.noCount": noCount,
-          verificationStatus,
-          isVerified: verificationStatus === 'community_verified' || verificationStatus === 'ai_verified'
-        });
-        return { already: false, updatedVoters, yesCount, noCount, verificationStatus };
-      });
-
-      if (txResult.already) {
+      if (currentVoters[user.uid] !== undefined) {
         showToast("이미 이 보틀에 대한 인증 투표를 완료하셨습니다.", "info");
         return;
       }
 
+      const updatedVoters = { ...currentVoters, [user.uid]: voteValue };
+
+      let yesCount = 0;
+      let noCount = 0;
+      Object.values(updatedVoters).forEach(v => {
+        if (v === 'yes') yesCount++;
+        if (v === 'no') noCount++;
+      });
+
+      const totalVotes = yesCount + noCount;
+      let verificationStatus = postSnap.verificationStatus || 'pending_vote';
+
+      if (totalVotes >= 3) {
+        const yesRatio = yesCount / totalVotes;
+        if (yesRatio >= 0.5) {
+          verificationStatus = 'community_verified';
+        } else {
+          verificationStatus = 'pending_vote';
+        }
+      }
+
+      await updateDoc(postRef, {
+        "votes.voters": updatedVoters,
+        "votes.yesCount": yesCount,
+        "votes.noCount": noCount,
+        verificationStatus,
+        isVerified: verificationStatus === 'community_verified' || verificationStatus === 'ai_verified'
+      });
+
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({
           ...prev,
-          verificationStatus: txResult.verificationStatus,
-          votes: { voters: txResult.updatedVoters, yesCount: txResult.yesCount, noCount: txResult.noCount }
+          verificationStatus,
+          votes: { voters: updatedVoters, yesCount, noCount }
         }));
       }
 
@@ -1652,14 +1642,8 @@ export default function TastingApp() {
     if (!window.confirm("이 댓글을 삭제할까요?")) return;
     try {
       const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', post.id);
-      // 🔒 트랜잭션: 최신 comments를 읽고 지움 → 그 사이 달린 다른 댓글이 날아가지 않음
-      const updatedComments = await runTransaction(db, async (tx) => {
-        const snap = await tx.get(postRef);
-        if (!snap.exists()) throw new Error("post-not-found");
-        const next = (snap.data().comments || []).filter(c => c.id !== comment.id);
-        tx.update(postRef, { comments: next });
-        return next;
-      });
+      const updatedComments = (post.comments || []).filter(c => c.id !== comment.id);
+      await updateDoc(postRef, { comments: updatedComments });
       if (selectedDetailNote && selectedDetailNote.id === post.id) {
         setSelectedDetailNote(prev => ({ ...prev, comments: updatedComments }));
       }
@@ -1671,6 +1655,84 @@ export default function TastingApp() {
   };
 
   // 🗑️ 내 개인 테이스팅 노트 삭제
+  // 🍾 분석 결과를 와인셀러에 보관 (같은 와인이면 수량 +1)
+  const handleStoreInCellar = async () => {
+    if (!analysisResult || !analysisResult.name) { showToast("먼저 라벨을 분석해 주세요.", "info"); return; }
+    if (!user || user.isAnonymous) { showToast("셀러는 구글 로그인 후 이용할 수 있어요!", "error"); return; }
+    try {
+      const key = normalizeWineName(analysisResult.name);
+      const existing = cellarItems.find(c => c.key === key);
+      if (existing) {
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'cellar', existing.id), { quantity: (existing.quantity || 1) + 1 });
+        showToast(`🍾 셀러에 1병 추가! (총 ${(existing.quantity || 1) + 1}병)`, "success");
+      } else {
+        const smallImage = image ? await compressImage(image, 300) : null;
+        const cellarRef = collection(db, 'artifacts', appId, 'users', user.uid, 'cellar');
+        await addDoc(cellarRef, {
+          key,
+          name: analysisResult.name,
+          analysisResult,
+          liquorType: analysisResult.detectedCategory || selectedLiquorType,
+          thumbnail: smallImage,
+          quantity: 1,
+          createdAt: Date.now()
+        });
+        showToast("🍾 셀러에 보관했어요!", "success");
+      }
+    } catch (err) {
+      showToast("셀러 저장 중 오류가 발생했어요.", "error");
+      console.error("셀러 저장 실패:", err);
+    }
+  };
+
+  // 🍷 셀러에서 1병 차감 (리뷰할 때 "그 와인 맞아요" 버튼)
+  const handleConsumeFromCellar = async (item) => {
+    if (!user || !item) return;
+    try {
+      const newQty = (item.quantity || 1) - 1;
+      const itemRef = doc(db, 'artifacts', appId, 'users', user.uid, 'cellar', item.id);
+      if (newQty <= 0) {
+        await deleteDoc(itemRef);
+      } else {
+        await updateDoc(itemRef, { quantity: newQty });
+      }
+      setCellarConsumed(true);
+      showToast(newQty <= 0 ? "🍾 셀러에서 마지막 1병을 꺼냈어요!" : `🍾 셀러에서 1병 꺼냈어요! (남은 ${newQty}병)`, "success");
+    } catch (err) {
+      showToast("셀러 차감 중 오류가 발생했어요.", "error");
+      console.error("셀러 차감 실패:", err);
+    }
+  };
+
+  // 셀러 수량 조절 / 삭제
+  const handleCellarQty = async (item, delta) => {
+    if (!user || !item) return;
+    const newQty = (item.quantity || 1) + delta;
+    const itemRef = doc(db, 'artifacts', appId, 'users', user.uid, 'cellar', item.id);
+    try {
+      if (newQty <= 0) {
+        if (!window.confirm("셀러에서 이 와인을 완전히 뺄까요?")) return;
+        await deleteDoc(itemRef);
+        showToast("셀러에서 제거했어요.", "success");
+      } else {
+        await updateDoc(itemRef, { quantity: newQty });
+      }
+    } catch (err) {
+      showToast("수량 변경 중 오류가 발생했어요.", "error");
+    }
+  };
+
+  const handleDeleteCellarItem = async (item) => {
+    if (!user || !item) return;
+    if (!window.confirm("셀러에서 이 와인을 뺄까요?")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'cellar', item.id));
+      showToast("셀러에서 제거했어요.", "success");
+    } catch (err) {
+      showToast("삭제 중 오류가 발생했어요.", "error");
+    }
+  };
+
   const handleDeleteMyNote = async (note) => {
     if (!user || !note) return;
     if (!window.confirm("이 노트를 삭제할까요? 되돌릴 수 없어요.")) return;
@@ -1693,39 +1755,31 @@ export default function TastingApp() {
       };
 
       // 🎯 댓글 작성 시: 드래그로 골라둔 별점이 있으면 이때 함께 "확정"한다.
-      // 🔒 트랜잭션: 별점/총점을 서버의 최신 값 기준으로 계산 → 동시에 별점 줘도 서로 안 지움
+      const targetPost = communityPosts.find(p => p.id === postId);
       const pending = pendingRatings[postId];
-      const txResult = await runTransaction(db, async (tx) => {
-        const snap = await tx.get(postRef);
-        if (!snap.exists()) throw new Error("post-not-found");
-        const fresh = snap.data();
+      const isAuthor = targetPost?.userId === user.uid;
+      const alreadyRated = targetPost?.ratings?.[user.uid] != null;
 
-        const isAuthor = fresh.userId === user.uid;
-        const alreadyRated = fresh.ratings?.[user.uid] != null;
+      const updatePayload = { comments: arrayUnion(newComment) };
+      let committedRatings = null;
+      let committedTotal = null;
 
-        const updatePayload = { comments: [...(fresh.comments || []), newComment] };
-        let committedRatings = null;
-        let committedTotal = null;
+      if (pending != null && !isAuthor && !alreadyRated) {
+        const updatedRatings = { ...(targetPost?.ratings || {}) };
+        updatedRatings[user.uid] = pending;
+        const authorId = targetPost?.userId;
+        committedTotal = Object.entries(updatedRatings).reduce((acc, [uid, val]) => (uid === authorId ? acc : acc + (Number(val) || 0)), 0);
+        committedRatings = updatedRatings;
+        updatePayload.ratings = updatedRatings;
+        updatePayload.totalCommunityScore = committedTotal;
+      }
 
-        if (pending != null && !isAuthor && !alreadyRated) {
-          const updatedRatings = { ...(fresh.ratings || {}) };
-          updatedRatings[user.uid] = pending;
-          const authorId = fresh.userId;
-          committedTotal = Object.entries(updatedRatings).reduce((acc, [uid, val]) => (uid === authorId ? acc : acc + (Number(val) || 0)), 0);
-          committedRatings = updatedRatings;
-          updatePayload.ratings = updatedRatings;
-          updatePayload.totalCommunityScore = committedTotal;
-        }
-
-        tx.update(postRef, updatePayload);
-        return { comments: updatePayload.comments, committedRatings, committedTotal };
-      });
-      const { committedRatings, committedTotal } = txResult;
+      await updateDoc(postRef, updatePayload);
 
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({
           ...prev,
-          comments: txResult.comments,
+          comments: [...(prev.comments || []), newComment],
           ...(committedRatings ? { ratings: committedRatings, totalCommunityScore: committedTotal } : {})
         }));
       }
@@ -1744,6 +1798,9 @@ export default function TastingApp() {
     if (!user || !replyInputs[commentId]?.trim()) return;
     const postRef = doc(db, 'artifacts', appId, 'public', 'data', 'community_posts', postId);
     try {
+      const targetPost = communityPosts.find(p => p.id === postId);
+      if (!targetPost) return;
+
       const newReply = {
         id: Date.now().toString() + Math.random(),
         userId: user.uid,
@@ -1752,19 +1809,15 @@ export default function TastingApp() {
         createdAt: Date.now()
       };
 
-      // 🔒 트랜잭션: 서버의 최신 comments 기준으로 대댓글 누적 → 그 사이 달린 댓글/답글 유실 방지
-      const updatedComments = await runTransaction(db, async (tx) => {
-        const snap = await tx.get(postRef);
-        if (!snap.exists()) throw new Error("post-not-found");
-        const next = (snap.data().comments || []).map(c => {
-          if (c.id === commentId) {
-            return { ...c, replies: [...(c.replies || []), newReply] };
-          }
-          return c;
-        });
-        tx.update(postRef, { comments: next });
-        return next;
+      // 기존 댓글 배열을 돌면서 매칭되는 댓글의 replies 내부에 새 대댓글 누적하기
+      const updatedComments = (targetPost.comments || []).map(c => {
+        if (c.id === commentId) {
+          return { ...c, replies: [...(c.replies || []), newReply] };
+        }
+        return c;
       });
+
+      await updateDoc(postRef, { comments: updatedComments });
 
       if (selectedDetailNote && selectedDetailNote.id === postId) {
         setSelectedDetailNote(prev => ({ ...prev, comments: updatedComments }));
@@ -1932,6 +1985,40 @@ export default function TastingApp() {
                   </div>
                 </div>
               </div>
+
+              {/* 🍾 셀러 매칭: 이 와인이 내 셀러에 있으면 물어보기 */}
+              {(() => {
+                const matchKey = normalizeWineName(analysisResult.name || '');
+                const match = matchKey ? cellarItems.find(c => c.key === matchKey && (c.quantity || 0) > 0) : null;
+                if (cellarConsumed) {
+                  return (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-center animate-in fade-in">
+                      <p className="text-xs font-black text-emerald-700">✔ 셀러에서 1병 꺼낸 것으로 기록했어요</p>
+                    </div>
+                  );
+                }
+                if (!match) return null;
+                return (
+                  <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 animate-in fade-in slide-in-from-top-1">
+                    <p className="text-sm font-black text-amber-900 mb-0.5">🍾 셀러에 보관 중인 와인이에요!</p>
+                    <p className="text-[11px] text-amber-700 font-medium mb-3">현재 {match.quantity || 1}병 보관 중 · 지금 마시는 게 이 와인인가요?</p>
+                    <button
+                      onClick={() => handleConsumeFromCellar(match)}
+                      className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs active:scale-95 transition-all"
+                    >
+                      네, 이 와인 맞아요 (셀러에서 1병 빼기)
+                    </button>
+                  </div>
+                );
+              })()}
+
+              {/* 🍾 셀러에 보관하기 */}
+              <button
+                onClick={handleStoreInCellar}
+                className="w-full flex items-center justify-center gap-2 bg-white border border-amber-300 text-amber-700 font-black text-sm py-3 rounded-2xl shadow-sm hover:bg-amber-50 transition-colors"
+              >
+                🍾 셀러에 보관하기 <span className="text-[10px] opacity-60">(마시지 않고 저장만)</span>
+              </button>
 
               {/* 🔍 자세한 정보 (보틀 백과) */}
               {(() => {
@@ -2273,6 +2360,63 @@ export default function TastingApp() {
     );
   };
 
+  // 🍾 와인셀러 화면
+  const renderCellarView = () => {
+    const totalBottles = cellarItems.reduce((acc, c) => acc + (c.quantity || 1), 0);
+    return (
+      <div className="space-y-4 animate-in fade-in duration-300">
+        <div className="bg-gradient-to-br from-amber-800 to-amber-950 text-white p-5 rounded-3xl shadow-lg">
+          <h2 className="text-lg font-black flex items-center gap-2">🍾 나의 와인셀러</h2>
+          <p className="text-amber-200/80 text-xs font-medium mt-1">보관 중인 술을 기록해두고, 마실 때 셀러에서 꺼내세요.</p>
+          <p className="text-[11px] font-black text-amber-100 mt-2 font-mono">{cellarItems.length}종 · 총 {totalBottles}병 보관 중</p>
+        </div>
+
+        <button
+          onClick={() => navigateTo('add')}
+          className="w-full flex items-center justify-center gap-2 bg-white border-2 border-dashed border-amber-300 text-amber-700 font-black text-sm py-4 rounded-2xl hover:bg-amber-50 transition-colors"
+        >
+          <Icon name="PlusCircle" className="w-5 h-5" /> 셀러에 와인 추가하기
+        </button>
+        <p className="text-[10px] text-gray-400 font-medium text-center -mt-2">사진/이름으로 분석한 뒤 "🍾 셀러에 보관하기"를 누르면 여기에 저장돼요.</p>
+
+        {cellarItems.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <p className="text-4xl mb-2">🍷</p>
+            <p className="text-sm font-medium">아직 셀러가 비어있어요.</p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {cellarItems.map((item) => {
+              const conf = LIQUOR_CONFIG[item.liquorType] || { icon: '🍸', name: '' };
+              const a = item.analysisResult || {};
+              return (
+                <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex gap-3 items-center">
+                  {item.thumbnail ? (
+                    <img src={item.thumbnail} alt={item.name} className="w-14 h-14 rounded-xl object-cover bg-gray-100 shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl shrink-0">{conf.icon}</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-gray-800 break-words leading-snug">{item.name}</p>
+                    <p className="text-[10px] text-gray-400 font-medium mt-0.5">{[a.region, a.vintage].filter(Boolean).join(' · ') || conf.name}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button onClick={() => handleCellarQty(item, -1)} className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm">−</button>
+                    <span className="text-sm font-black text-gray-800 font-mono w-8 text-center">{item.quantity || 1}병</span>
+                    <button onClick={() => handleCellarQty(item, 1)} className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm">+</button>
+                    <button onClick={() => handleDeleteCellarItem(item)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center" title="셀러에서 빼기">
+                      <Icon name="Trash" className="w-3.5 h-3.5 text-red-400" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderListView = () => {
 
     return (
@@ -2347,7 +2491,7 @@ export default function TastingApp() {
                 <div>
                   <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                     <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase ${theme.bg} ${theme.text}`}>
-                      {note.liquorType !== 'wine' ? `${conf.icon} ${conf.name}` : note.analysisResult?.wineStyle === 'white' ? '🥂 화이트' : note.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인' : note.analysisResult?.wineStyle === 'desert' ? '🍯 디저트' : '🍷 레드'}
+                      {note.analysisResult?.wineStyle === 'white' ? '🥂 화이트' : note.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인' : note.analysisResult?.wineStyle === 'desert' ? '🍯 디저트' : '🍷 레드'}
                     </span>
                     {note.analysisResult?.vintage && note.analysisResult.vintage !== 'null' && (
                       <span className="text-[9px] font-mono font-bold bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
@@ -2530,7 +2674,7 @@ export default function TastingApp() {
                               <span className="bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded text-indigo-700 font-mono">{post.totalCommunityScore ? post.totalCommunityScore.toFixed(1) : "0.0"} 점</span>
                             </div>
                             <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden border border-gray-200/40 shadow-inner">
-                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / maxCommunityScore) * 100)}%` }}></div>
+                              <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, ((post.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
                             </div>
                             <p className="text-[9px] text-gray-400 font-bold text-right">참여: {Object.keys(post.ratings || {}).length}명 / 평점: {post.ratings && Object.keys(post.ratings).length > 0 ? (Object.values(post.ratings).reduce((a, b) => a + b, 0) / Object.keys(post.ratings).length).toFixed(1) : "0.0"}점</p>
                           </div>
@@ -2775,6 +2919,7 @@ export default function TastingApp() {
           <nav className="p-3 space-y-1">
             <button onClick={() => navigateTo('add')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'add' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="PlusCircle" className="w-5 h-5 mr-3" /> 새 노트 작성</button>
             <button onClick={() => navigateTo('list')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'list' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="List" className="w-5 h-5 mr-3" /> 내 테이스팅 노트</button>
+            <button onClick={() => navigateTo('cellar')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'cellar' ? 'bg-amber-700 text-white shadow-md' : 'text-amber-700 hover:bg-amber-50'}`}><span className="w-5 h-5 mr-3 flex items-center justify-center text-base">🍾</span> 나의 와인셀러</button>
             <button onClick={() => navigateTo('insights')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'insights' ? 'bg-gray-900 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'}`}><Icon name="BarChart3" className="w-5 h-5 mr-3" /> 나의 취향 분석</button>
             <div className="my-2 border-t border-gray-100"></div>
             <button onClick={() => navigateTo('search')} className={`w-full flex items-center px-4 py-3 rounded-xl font-medium ${currentView === 'search' ? 'bg-blue-600 text-white shadow-md' : 'text-blue-600 hover:bg-blue-50'}`}><Icon name="Search" className="w-5 h-5 mr-3" /> 보틀 백과 & 시세 검색</button>
@@ -2786,6 +2931,7 @@ export default function TastingApp() {
       <main className="max-w-md mx-auto p-4 mt-2">
         {currentView === 'add' && renderAddView()}
         {currentView === 'list' && renderListView()}
+        {currentView === 'cellar' && renderCellarView()}
         {currentView === 'insights' && renderInsightsView()}
         {currentView === 'search' && renderSearchView()}
         {currentView === 'community' && renderCommunityView()}
@@ -2896,7 +3042,7 @@ export default function TastingApp() {
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] bg-rose-50 text-rose-800 font-bold px-2 py-0.5 rounded uppercase border border-rose-100">
-                  {selectedDetailNote.liquorType !== 'wine' ? `${(LIQUOR_CONFIG[selectedDetailNote.liquorType] || LIQUOR_CONFIG.wine).icon} ${(LIQUOR_CONFIG[selectedDetailNote.liquorType] || LIQUOR_CONFIG.wine).name}` : selectedDetailNote.analysisResult?.wineStyle === 'white' ? '🥂 화이트 와인' : selectedDetailNote.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인/스파클링' : selectedDetailNote.analysisResult?.wineStyle === 'desert' ? '🍯 디저트 와인' : '🍷 레드 와인'}
+                  {selectedDetailNote.analysisResult?.wineStyle === 'white' ? '🥂 화이트 와인' : selectedDetailNote.analysisResult?.wineStyle === 'champagne' ? '🍾 샴페인/스파클링' : selectedDetailNote.analysisResult?.wineStyle === 'desert' ? '🍯 디저트 와인' : '🍷 레드 와인'}
                 </span>
                 <h3 className="font-black text-xl text-gray-900 mt-1 leading-tight">{selectedDetailNote.analysisResult?.name}</h3>
               </div>
@@ -3048,7 +3194,7 @@ export default function TastingApp() {
                   <span className="text-indigo-600 font-mono">{(selectedDetailNote.totalCommunityScore || 0).toFixed(1)} 점</span>
                 </div>
                 <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden shadow-inner">
-                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full" style={{ width: `${Math.min(100, ((selectedDetailNote.totalCommunityScore || 0) / maxCommunityScore) * 100)}%` }}></div>
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 h-full rounded-full" style={{ width: `${Math.min(100, ((selectedDetailNote.totalCommunityScore || 0) / Math.max(1, (communityPosts[0]?.totalCommunityScore || 100))) * 100)}%` }}></div>
                 </div>
               </div>
 
