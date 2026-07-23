@@ -448,6 +448,8 @@ export default function TastingApp() {
   const [cellarConsumed, setCellarConsumed] = useState(false); // 이번 분석에서 셀러 차감했는지
   const [cellarStored, setCellarStored] = useState(false); // 이번 분석에서 셀러에 보관했는지 (보관 직후 "마시나요?" 질문 방지)
   const [storeQty, setStoreQty] = useState(1); // 셀러에 한 번에 보관할 병 수
+  const [cellarFilter, setCellarFilter] = useState('all'); // 셀러 주종 필터 (all/wine/whiskey/...)
+  const [cellarSort, setCellarSort] = useState('latest');  // 셀러 정렬 (latest/name/region/qty)
   const [listSortKey, setListSortKey] = useState('latest'); // 내 노트 정렬 필터 플래그
   const [filterStyle, setFilterStyle] = useState('all'); // 와인 스타일 필터링
   const [filterRegion, setFilterRegion] = useState('all'); // 와인 지역 필터링
@@ -2431,35 +2433,107 @@ export default function TastingApp() {
             <p className="text-4xl mb-2">🍷</p>
             <p className="text-sm font-medium">아직 셀러가 비어있어요.</p>
           </div>
-        ) : (
-          <div className="space-y-2.5">
-            {cellarItems.map((item) => {
-              const conf = LIQUOR_CONFIG[item.liquorType] || { icon: '🍸', name: '' };
-              const a = item.analysisResult || {};
-              return (
-                <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex gap-3 items-center">
-                  {item.thumbnail ? (
-                    <img src={item.thumbnail} alt={item.name} className="w-14 h-14 rounded-xl object-cover bg-gray-100 shrink-0" />
-                  ) : (
-                    <div className="w-14 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl shrink-0">{conf.icon}</div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black text-gray-800 break-words leading-snug">{item.name}</p>
-                    <p className="text-[10px] text-gray-400 font-medium mt-0.5">{[a.region, a.vintage].filter(Boolean).join(' · ') || conf.name}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button onClick={() => handleCellarQty(item, -1)} className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm">−</button>
-                    <span className="text-sm font-black text-gray-800 font-mono w-8 text-center">{item.quantity || 1}병</span>
-                    <button onClick={() => handleCellarQty(item, 1)} className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm">+</button>
-                    <button onClick={() => handleDeleteCellarItem(item)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center" title="셀러에서 빼기">
-                      <Icon name="Trash" className="w-3.5 h-3.5 text-red-400" />
-                    </button>
-                  </div>
+        ) : (() => {
+          // 🔎 주종 필터 + 정렬
+          const typeCounts = {};
+          cellarItems.forEach(c => { const t = c.liquorType || 'wine'; typeCounts[t] = (typeCounts[t] || 0) + 1; });
+          const activeFilter = cellarFilter !== 'all' && !typeCounts[cellarFilter] ? 'all' : cellarFilter; // 필터 대상이 사라졌으면 전체로
+          const filtered = activeFilter === 'all' ? cellarItems : cellarItems.filter(c => (c.liquorType || 'wine') === activeFilter);
+          const sorted = [...filtered].sort((x, y) => {
+            if (cellarSort === 'name') return (x.name || '').localeCompare(y.name || '', 'ko');
+            if (cellarSort === 'qty') return (y.quantity || 1) - (x.quantity || 1) || (x.name || '').localeCompare(y.name || '', 'ko');
+            if (cellarSort === 'region') {
+              const rx = x.analysisResult?.region || '', ry = y.analysisResult?.region || '';
+              if (!rx && ry) return 1; if (rx && !ry) return -1; // 지역 없는 건 뒤로
+              return rx.localeCompare(ry, 'ko') || (x.name || '').localeCompare(y.name || '', 'ko');
+            }
+            return (y.createdAt || 0) - (x.createdAt || 0); // 최근 추가순
+          });
+          // 지역별 정렬일 땐 같은 지역끼리 묶어서 헤더 표시
+          const groups = [];
+          if (cellarSort === 'region') {
+            sorted.forEach(item => {
+              const region = item.analysisResult?.region || '🌐 지역 정보 없음';
+              const last = groups[groups.length - 1];
+              if (last && last.region === region) last.items.push(item);
+              else groups.push({ region, items: [item] });
+            });
+          }
+          const renderItem = (item) => {
+            const conf = LIQUOR_CONFIG[item.liquorType] || { icon: '🍸', name: '' };
+            const a = item.analysisResult || {};
+            return (
+              <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex gap-3 items-center">
+                {item.thumbnail ? (
+                  <img src={item.thumbnail} alt={item.name} className="w-14 h-14 rounded-xl object-cover bg-gray-100 shrink-0" />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl bg-gray-50 flex items-center justify-center text-2xl shrink-0">{conf.icon}</div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-gray-800 break-words leading-snug">{item.name}</p>
+                  <p className="text-[10px] text-gray-400 font-medium mt-0.5">{[a.region, a.vintage].filter(Boolean).join(' · ') || conf.name}</p>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => handleCellarQty(item, -1)} className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm">−</button>
+                  <span className="text-sm font-black text-gray-800 font-mono w-8 text-center">{item.quantity || 1}병</span>
+                  <button onClick={() => handleCellarQty(item, 1)} className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-black text-sm">+</button>
+                  <button onClick={() => handleDeleteCellarItem(item)} className="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center" title="셀러에서 빼기">
+                    <Icon name="Trash" className="w-3.5 h-3.5 text-red-400" />
+                  </button>
+                </div>
+              </div>
+            );
+          };
+          return (
+            <>
+              {/* 주종 필터 칩 + 정렬 선택 */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex-1 flex gap-1.5 flex-wrap min-w-0">
+                  <button
+                    onClick={() => setCellarFilter('all')}
+                    className={`px-2.5 py-1.5 rounded-full text-[11px] font-black transition-colors ${activeFilter === 'all' ? 'bg-amber-700 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-500 hover:bg-amber-50'}`}
+                  >전체 {cellarItems.length}</button>
+                  {Object.keys(LIQUOR_CONFIG).filter(t => typeCounts[t]).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setCellarFilter(t)}
+                      className={`px-2.5 py-1.5 rounded-full text-[11px] font-black transition-colors ${activeFilter === t ? 'bg-amber-700 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-500 hover:bg-amber-50'}`}
+                    >{LIQUOR_CONFIG[t].icon} {LIQUOR_CONFIG[t].name} {typeCounts[t]}</button>
+                  ))}
+                </div>
+                <select
+                  value={cellarSort}
+                  onChange={(e) => setCellarSort(e.target.value)}
+                  className="text-[11px] font-black bg-white border border-gray-200 rounded-lg p-1.5 outline-none text-gray-700 cursor-pointer shrink-0"
+                >
+                  <option value="latest">📅 최근 추가순</option>
+                  <option value="name">🔤 이름순</option>
+                  <option value="region">🌍 지역별</option>
+                  <option value="qty">🍾 수량 많은순</option>
+                </select>
+              </div>
+
+              {sorted.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-sm font-medium">이 주종은 셀러에 없어요.</div>
+              ) : cellarSort === 'region' ? (
+                <div className="space-y-3">
+                  {groups.map((g) => (
+                    <div key={g.region} className="space-y-2">
+                      <div className="flex items-center gap-2 px-1">
+                        <p className="text-[11px] font-black text-amber-800">📍 {g.region}</p>
+                        <span className="text-[10px] font-bold text-gray-400">{g.items.length}종 · {g.items.reduce((acc, c) => acc + (c.quantity || 1), 0)}병</span>
+                        <div className="flex-1 h-px bg-amber-100" />
+                      </div>
+                      <div className="space-y-2.5">{g.items.map(renderItem)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2.5">{sorted.map(renderItem)}</div>
+              )}
+            </>
+          );
+        })()}
       </div>
     );
   };
