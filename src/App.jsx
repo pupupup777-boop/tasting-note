@@ -868,7 +868,7 @@ export default function TastingApp() {
       // 키를 들고 구글을 부르는 건 서버(/api/search)가 한다. 브라우저는 검색어만 보낸다.
       const response = await fetch('/api/search', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ query: q })
       });
 
@@ -903,7 +903,7 @@ export default function TastingApp() {
       const base64Data = base64Image.split(',')[1];
       const exRes = await fetch('/api/extract-name', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ base64Data })
       });
       if (!exRes.ok) {
@@ -978,7 +978,7 @@ export default function TastingApp() {
       // 3) AI 호출
       const res = await fetch('/api/details', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ name: analysisResult.name })
       });
       if (!res.ok) {
@@ -1057,6 +1057,15 @@ export default function TastingApp() {
     if (!isAdmin) return '';
     if (err?.name === 'AbortError') return '  🔧[타임아웃: 응답이 너무 늦음]';
     return `  🔧[예외: ${String(err?.message || err).slice(0, 140)}]`;
+  };
+
+  // 🔒 서버 API 호출용 헤더: Firebase ID 토큰을 실어 보낸다 (서버가 로그인 여부를 검증)
+  const authHeaders = async () => {
+    const h = { 'Content-Type': 'application/json' };
+    try {
+      if (auth.currentUser) h['Authorization'] = `Bearer ${await auth.currentUser.getIdToken()}`;
+    } catch (e) { console.error("토큰 발급 실패:", e); }
+    return h;
   };
 
   const usageDocRef = () => doc(db, 'artifacts', appId, 'users', user.uid, 'meta', 'usage');
@@ -1148,7 +1157,7 @@ export default function TastingApp() {
     try {
       const res = await fetch('/api/insights', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ mode, profile, liquorName })
       });
       if (!res.ok) {
@@ -1212,7 +1221,7 @@ export default function TastingApp() {
       try {
         const nameRes = await fetch('/api/extract-name', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders(),
           body: JSON.stringify({ base64Data })
         });
         if (nameRes.ok) {
@@ -1254,7 +1263,7 @@ export default function TastingApp() {
       // ─────────────────────────────────────────────
       const response = await fetch('/api/analyze', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ base64Data, liquorName: config.name })
       });
 
@@ -1371,7 +1380,7 @@ export default function TastingApp() {
       try {
         res = await fetch('/api/analyze-name', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: await authHeaders(),
           body: JSON.stringify({ name: q, liquorName: config.name }),
           signal: controller.signal
         });
