@@ -462,7 +462,6 @@ export default function TastingApp() {
   const [communitySort, setCommunitySort] = useState('latest');
   const [shareToCommunity, setShareToCommunity] = useState(false);
   const [showShareConfirm, setShowShareConfirm] = useState(false); // 저장 시 라운지 공유 여부 묻는 팝업
-  const [verificationCode, setVerificationCode] = useState('');
   const [commentInputs, setCommentInputs] = useState({});
   const [pendingRatings, setPendingRatings] = useState({}); // 🎚️ 드래그로 골라둔(아직 미확정) 별점. 댓글 작성 시 확정됨
   const [replyInputs, setReplyInputs] = useState({});
@@ -732,14 +731,7 @@ export default function TastingApp() {
     setPersonalNotes('');
     setOverallRating(0);
     setShareToCommunity(false);
-    setVerificationCode('CODE-' + Math.floor(1000 + Math.random() * 9000));
   };
-
-  useEffect(() => {
-    setVerificationCode('CODE-' + Math.floor(1000 + Math.random() * 9000));
-  }, []);
-
-  const [showLoginModal, setShowLoginModal] = useState(false);
 
   // ✅ [모바일 로그인 수정] 홈화면 추가(standalone) / 모바일 환경 감지기
   // 이런 환경에서는 팝업(signInWithPopup)이 storage 분리 때문에 깨지므로 리다이렉트를 써야 한다.
@@ -771,7 +763,6 @@ export default function TastingApp() {
 
     setUserProfile(p => ({ ...p, nickname: finalNickname }));
     setUser(loggedInUser);
-    setShowLoginModal(false);
     showToast(`반갑습니다, ${finalNickname}님! 로그인 성공!`, "success");
   };
 
@@ -984,7 +975,6 @@ export default function TastingApp() {
           if (snap.exists() && snap.data().details) {
             setDetailsInfo(snap.data().details);
             setDetailsSource('cache');
-            console.log("[DETAILS CACHE HIT]", key);
             setDetailsLoading(false);
             return; // 카운트 안 함
           }
@@ -1017,7 +1007,6 @@ export default function TastingApp() {
       setDetailsInfo(parsed);
       setDetailsSource('ai');
       setDetailsLoading(false);
-      console.log("[DETAILS AI]", analysisResult.name);
       incrementLabelCount(); // AI 사용했으니 카운트 (백그라운드)
 
       // 카탈로그에 details 저장 (백그라운드) → 다음 사람은 공짜
@@ -1197,7 +1186,6 @@ export default function TastingApp() {
       const now = Date.now();
       await setDoc(ref, { [field]: now }, { merge: true });
       setUsageInfo(prev => ({ ...(prev || {}), [field]: now }));
-      console.log(`[INSIGHT ${mode}/${liquorType}] 분석 완료`);
     } catch (e) {
       showToast('서버 통신 오류로 분석이 지연되고 있어요. 잠시 후 다시 시도해 주세요.', 'error');
       console.error('취향분석 에러:', e);
@@ -1272,7 +1260,6 @@ export default function TastingApp() {
             }
             setAnalysisResult(cached);
             setIsAnalyzing(false); // ✅ 즉시 표시
-            console.log("[CACHE HIT] 카탈로그에서 불러옴 (AI 미사용):", lookupKey);
             showToast("🍷 주종을 감지했습니다!", "success");
             incrementLabelCount(); // 백그라운드
             return; // 🎯 비싼 상세분석 스킵
@@ -1319,7 +1306,6 @@ export default function TastingApp() {
       }
       setAnalysisResult(parsed);
       setIsAnalyzing(false); // ✅ 결과 즉시 표시 (저장 작업 기다리지 않음)
-      console.log("[AI ANALYZE] AI로 새로 분석함:", parsed.name);
       showToast("✨ 주종을 감지했습니다!", "success");
       incrementLabelCount(); // 카운트는 백그라운드로 (await 안 함)
 
@@ -1388,7 +1374,6 @@ export default function TastingApp() {
             }
             setAnalysisResult(cached);
             setIsAnalyzing(false); // ✅ 즉시 표시
-            console.log("[CACHE HIT] (이름검색):", lookupKey);
             showToast("🍷 정보를 불러왔어요!", "success");
             incrementLabelCount();
             setNameQuery('');
@@ -1440,7 +1425,6 @@ export default function TastingApp() {
       }
       setAnalysisResult(parsed);
       setIsAnalyzing(false); // ✅ 결과 즉시 표시
-      console.log("[AI ANALYZE] (이름검색):", parsed.name);
       showToast("✨ 정보를 찾았어요!", "success");
       incrementLabelCount();
       setNameQuery('');
