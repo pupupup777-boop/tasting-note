@@ -424,6 +424,7 @@ export default function TastingApp() {
   const [notes, setNotes] = useState([]);
   const [cellarItems, setCellarItems] = useState([]);        // 🍾 와인셀러 (내 보관 목록)
   const [cellarConsumed, setCellarConsumed] = useState(false); // 이번 분석에서 셀러 차감했는지
+  const [cellarStored, setCellarStored] = useState(false); // 이번 분석에서 셀러에 보관했는지 (보관 직후 "마시나요?" 질문 방지)
   const [listSortKey, setListSortKey] = useState('latest'); // 내 노트 정렬 필터 플래그
   const [filterStyle, setFilterStyle] = useState('all'); // 와인 스타일 필터링
   const [filterRegion, setFilterRegion] = useState('all'); // 와인 지역 필터링
@@ -701,7 +702,7 @@ export default function TastingApp() {
   const resetForm = () => {
     setImage(null);
     setAnalysisResult(null);
-    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false);
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false);
     setPrice('');
     setRatings({});
     setSelectedAromas([]);
@@ -1209,7 +1210,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null); // 새 분석 시작 시 이전 결과 초기화 (다시 찍기 대응)
-    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false);
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false);
     const base64Data = base64Image.split(',')[1];
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1346,7 +1347,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null);
-    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false);
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false);
     setImage(null); // 사진 없이 진행
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1673,6 +1674,7 @@ export default function TastingApp() {
       const existing = cellarItems.find(c => c.key === key);
       if (existing) {
         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'cellar', existing.id), { quantity: (existing.quantity || 1) + 1 });
+        setCellarStored(true);
         showToast(`🍾 셀러에 1병 추가! (총 ${(existing.quantity || 1) + 1}병)`, "success");
       } else {
         const smallImage = image ? await compressImage(image, 300) : null;
@@ -1686,6 +1688,7 @@ export default function TastingApp() {
           quantity: 1,
           createdAt: Date.now()
         });
+        setCellarStored(true);
         showToast("🍾 셀러에 보관했어요!", "success");
       }
     } catch (err) {
@@ -2003,6 +2006,13 @@ export default function TastingApp() {
                   return (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-center animate-in fade-in">
                       <p className="text-xs font-black text-emerald-700">✔ 셀러에서 1병 꺼낸 것으로 기록했어요</p>
+                    </div>
+                  );
+                }
+                if (cellarStored) {
+                  return (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-center animate-in fade-in">
+                      <p className="text-xs font-black text-emerald-700">🍾 셀러에 보관 완료!{match ? ` (현재 ${match.quantity || 1}병)` : ''}</p>
                     </div>
                   );
                 }
