@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     contents: [{
       role: 'user',
       parts: [
-        { text: "이 주류 라벨 사진에서 제품의 정식 명칭만 추출하세요. 가능하면 영문 정식 명칭으로 통일하고, 빈티지(연도)는 제외한 제품명만 반환하세요. 다른 설명 없이 이름만." },
+        { text: "이 주류 라벨 사진에서 제품의 정식 명칭만 추출하세요. 반드시 라벨의 로마자(영문/원어) 표기로, '생산자 + 제품명' 형식으로 통일하세요. 한글 번역·음차 금지, 빈티지(연도) 제외. 다른 설명 없이 이름만." },
         { inlineData: { mimeType: 'image/jpeg', data: base64Data } }
       ]
     }],
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
       responseSchema: {
         type: 'OBJECT',
         properties: {
-          name: { type: 'STRING', description: '제품 정식 명칭 (영문 우선, 빈티지 제외)' }
+          name: { type: 'STRING', description: '공식 로마자(영문/원어) 명칭. 생산자+제품명 형식, 빈티지 제외, 한글 금지' }
         },
         required: ['name']
       }

@@ -32,7 +32,7 @@ export default async function handler(req, res) {
 [정확한 판독 지침]
 - 라벨의 모든 텍스트(작은 글씨, 상단/하단/측면 포함)를 꼼꼼히 읽으세요.
 - 와인(특히 프랑스 부르고뉴/보르도)의 경우 '생산자(Domaine/Château/Maison)'와 '아펠라시옹(원산지 명칭, 예: Gevrey-Chambertin, Pommard)'을 반드시 구분하세요. producer에는 도멘/샤또 이름을, region에는 아펠라시옹과 국가/세부지역을 넣으세요.
-- name은 라벨에 표기된 정식 명칭으로, 생산자명과 아펠라시옹/퀴베명을 합쳐 가장 일반적으로 불리는 형태로 적으세요.
+- name은 반드시 라벨의 공식 로마자(영문/원어) 표기로 적으세요. 한글 번역·음차 금지. '생산자 + 제품명(퀴베/아펠라시옹)' 형식으로 가장 일반적으로 불리는 형태로 적되, 빈티지(연도)는 name에 절대 넣지 말고 vintage 항목에만 넣으세요. (예: "Kendall-Jackson Vintner's Reserve Chardonnay")
 - 텍스트가 흐릿해 확신이 없는 항목은 지어내지 말고 빈 문자열로 두세요.
 
 [주종 자동 동기화 보정]
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
       responseSchema: {
         type: 'OBJECT',
         properties: {
-          name: { type: 'STRING', description: '주류의 정식 공식 명칭' },
+          name: { type: 'STRING', description: '공식 로마자(영문/원어) 명칭. 생산자+제품명 형식, 빈티지 연도 제외, 한글 금지' },
           type: { type: 'STRING', description: '상세 종류/스타일분류' },
           region: { type: 'STRING', description: '생산지 국가 및 세부지역' },
           vintage: { type: 'STRING', description: '빈티지 년도 또는 숙성연수 정보 (없을 경우 null)' },

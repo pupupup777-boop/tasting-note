@@ -59,7 +59,7 @@ export default async function handler(req, res) {
   const fastPrompt =
     `사용자가 입력한 '${cat}' 제품 이름: "${name}". 아는 정보를 채우되 모르는 항목은 추측 말고 빈 문자열로 두세요. ` +
     `와인(특히 부르고뉴/보르도)은 생산자(Domaine/Château)와 아펠라시옹(원산지명)을 구분해 producer/region에 각각 넣으세요. ` +
-    `name은 정식 명칭으로 보정하고, detectedCategory는 wine/whiskey/sake/beer 중 택일.`;
+    `name은 반드시 공식 로마자(영문/원어) 표기로 보정하세요(한글로 입력됐어도 영문 정식 명칭으로 변환, 빈티지 연도 제외, '생산자 + 제품명' 형식). detectedCategory는 wine/whiskey/sake/beer 중 택일.`;
 
   const schema = {
     type: 'OBJECT',
@@ -83,7 +83,7 @@ export default async function handler(req, res) {
   if (sparse) {
     const searchPrompt =
       `'${cat}' 제품 "${name}"에 대해 웹 검색으로 정보를 찾아 아래 JSON만 출력(설명·코드블록 금지). 모르면 빈 문자열:\n` +
-      `{"name":"정식명칭","type":"세부종류","region":"지역/국가","vintage":"연도(모르면 빈칸)","grape":"품종/원료","producer":"생산자","detectedCategory":"wine|whiskey|sake|beer"}`;
+      `{"name":"공식 로마자 명칭(생산자+제품명, 빈티지·한글 금지)","type":"세부종류","region":"지역/국가","vintage":"연도(모르면 빈칸)","grape":"품종/원료","producer":"생산자","detectedCategory":"wine|whiskey|sake|beer"}`;
     const searched = await callGemini(GEMINI_API_KEY, {
       contents: [{ role: 'user', parts: [{ text: searchPrompt }] }],
       tools: [{ google_search: {} }]
