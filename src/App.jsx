@@ -188,6 +188,28 @@ const normalizeWineName = (name) => {
     .slice(0, 300);               // 키 길이 안전장치
 };
 
+// 🍾 [셀러 매칭] 분석할 때마다 AI가 이름을 조금씩 다르게 읽어도 같은 와인으로 인식하는 유사 매칭
+// (빈티지 연도 제거 → 하이픈/따옴표 제거 → 한쪽이 다른쪽에 포함되거나, 문자 유사도가 높으면 같은 와인)
+const isSameWineKey = (a, b) => {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const strip = (s) => s.replace(/(19|20)\d{2}/g, '').replace(/[-'’`&,!]/g, '');
+  const sa = strip(a), sb = strip(b);
+  if (sa && sa === sb) return true;
+  const da = sa.replace(/\D/g, ''), db = sb.replace(/\D/g, '');
+  if (da && db && da !== db) return false; // 빈티지 외 숫자가 서로 다르면 다른 술 (12년/15년, Bin 389/407 등)
+  const [shorter, longer] = sa.length <= sb.length ? [sa, sb] : [sb, sa];
+  if (shorter.length >= 5 && longer.includes(shorter)) return true; // 한쪽 이름이 다른쪽에 통째로 포함 (생산자·빈티지 유무 차이)
+  if (shorter.length >= 4) {
+    const grams = (s) => { const g = new Set(); for (let i = 0; i < s.length - 1; i++) g.add(s.slice(i, i + 2)); return g; };
+    const ga = grams(sa), gb = grams(sb);
+    let inter = 0; ga.forEach(x => { if (gb.has(x)) inter++; });
+    if ((2 * inter) / (ga.size + gb.size) >= 0.6) return true; // 2글자 조각 60% 이상 겹치면 같은 와인으로 판단
+    if (inter / Math.min(ga.size, gb.size) >= 0.8) return true; // 짧은 이름의 조각 대부분이 긴 이름에 들어있으면 같은 와인 (중간에 단어가 끼는 경우)
+  }
+  return false;
+};
+
 const compressImage = (base64Str, maxWidth = 400) => {
   return new Promise((resolve) => {
     let img = new Image();
@@ -1671,7 +1693,7 @@ export default function TastingApp() {
     if (!user || user.isAnonymous) { showToast("셀러는 구글 로그인 후 이용할 수 있어요!", "error"); return; }
     try {
       const key = normalizeWineName(analysisResult.name);
-      const existing = cellarItems.find(c => c.key === key);
+      const existing = cellarItems.find(c => c.key === key) || cellarItems.find(c => isSameWineKey(c.key, key));
       if (existing) {
         await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'cellar', existing.id), { quantity: (existing.quantity || 1) + 1 });
         setCellarStored(true);
@@ -2001,7 +2023,10 @@ export default function TastingApp() {
               {/* 🍾 셀러 매칭: 이 와인이 내 셀러에 있으면 물어보기 */}
               {(() => {
                 const matchKey = normalizeWineName(analysisResult.name || '');
-                const match = matchKey ? cellarItems.find(c => c.key === matchKey && (c.quantity || 0) > 0) : null;
+                const match = matchKey
+                  ? (cellarItems.find(c => c.key === matchKey && (c.quantity || 0) > 0)
+                    || cellarItems.find(c => isSameWineKey(c.key, matchKey) && (c.quantity || 0) > 0))
+                  : null;
                 if (cellarConsumed) {
                   return (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 text-center animate-in fade-in">
