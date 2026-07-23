@@ -447,6 +447,7 @@ export default function TastingApp() {
   const [cellarItems, setCellarItems] = useState([]);        // 🍾 와인셀러 (내 보관 목록)
   const [cellarConsumed, setCellarConsumed] = useState(false); // 이번 분석에서 셀러 차감했는지
   const [cellarStored, setCellarStored] = useState(false); // 이번 분석에서 셀러에 보관했는지 (보관 직후 "마시나요?" 질문 방지)
+  const [storeQty, setStoreQty] = useState(1); // 셀러에 한 번에 보관할 병 수
   const [listSortKey, setListSortKey] = useState('latest'); // 내 노트 정렬 필터 플래그
   const [filterStyle, setFilterStyle] = useState('all'); // 와인 스타일 필터링
   const [filterRegion, setFilterRegion] = useState('all'); // 와인 지역 필터링
@@ -724,7 +725,7 @@ export default function TastingApp() {
   const resetForm = () => {
     setImage(null);
     setAnalysisResult(null);
-    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false);
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false); setStoreQty(1);
     setPrice('');
     setRatings({});
     setSelectedAromas([]);
@@ -1232,7 +1233,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null); // 새 분석 시작 시 이전 결과 초기화 (다시 찍기 대응)
-    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false);
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false); setStoreQty(1);
     const base64Data = base64Image.split(',')[1];
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1369,7 +1370,7 @@ export default function TastingApp() {
     setIsAnalyzing(true);
     setError(null);
     setAnalysisResult(null);
-    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false);
+    setDetailsInfo(null); setDetailsSource(""); setCellarConsumed(false); setCellarStored(false); setStoreQty(1);
     setImage(null); // 사진 없이 진행
     const config = LIQUOR_CONFIG[selectedLiquorType];
 
@@ -1694,10 +1695,11 @@ export default function TastingApp() {
     try {
       const key = normalizeWineName(analysisResult.name);
       const existing = cellarItems.find(c => c.key === key) || cellarItems.find(c => isSameWineKey(c.key, key));
+      const qty = Math.max(1, storeQty || 1);
       if (existing) {
-        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'cellar', existing.id), { quantity: (existing.quantity || 1) + 1 });
+        await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'cellar', existing.id), { quantity: (existing.quantity || 1) + qty });
         setCellarStored(true);
-        showToast(`🍾 셀러에 1병 추가! (총 ${(existing.quantity || 1) + 1}병)`, "success");
+        showToast(`🍾 셀러에 ${qty}병 추가! (총 ${(existing.quantity || 1) + qty}병)`, "success");
       } else {
         const smallImage = image ? await compressImage(image, 300) : null;
         const cellarRef = collection(db, 'artifacts', appId, 'users', user.uid, 'cellar');
@@ -1707,11 +1709,11 @@ export default function TastingApp() {
           analysisResult,
           liquorType: analysisResult.detectedCategory || selectedLiquorType,
           thumbnail: smallImage,
-          quantity: 1,
+          quantity: qty,
           createdAt: Date.now()
         });
         setCellarStored(true);
-        showToast("🍾 셀러에 보관했어요!", "success");
+        showToast(`🍾 셀러에 ${qty}병 보관했어요!`, "success");
       }
     } catch (err) {
       showToast("셀러 저장 중 오류가 발생했어요.", "error");
@@ -2056,13 +2058,30 @@ export default function TastingApp() {
                 );
               })()}
 
-              {/* 🍾 셀러에 보관하기 */}
-              <button
-                onClick={handleStoreInCellar}
-                className="w-full flex items-center justify-center gap-2 bg-white border border-amber-300 text-amber-700 font-black text-sm py-3 rounded-2xl shadow-sm hover:bg-amber-50 transition-colors"
-              >
-                🍾 셀러에 보관하기 <span className="text-[10px] opacity-60">(마시지 않고 저장만)</span>
-              </button>
+              {/* 🍾 셀러에 보관하기 — 병 수 정하고 한 번만 누르면 끝 (보관 후엔 버튼 사라짐) */}
+              {!cellarStored && (
+                <div className="w-full flex items-stretch gap-2">
+                  <button
+                    onClick={handleStoreInCellar}
+                    className="flex-1 flex items-center justify-center gap-2 bg-white border border-amber-300 text-amber-700 font-black text-sm py-3 rounded-2xl shadow-sm hover:bg-amber-50 transition-colors"
+                  >
+                    🍾 셀러에 {storeQty}병 보관하기 <span className="text-[10px] opacity-60">(마시지 않고 저장만)</span>
+                  </button>
+                  <div className="flex items-center gap-0.5 bg-white border border-amber-300 rounded-2xl shadow-sm px-1.5 shrink-0">
+                    <button
+                      onClick={() => setStoreQty(q => Math.max(1, q - 1))}
+                      className="w-8 h-8 rounded-xl text-amber-700 font-black text-lg hover:bg-amber-50 active:scale-90 transition-all"
+                      aria-label="병 수 줄이기"
+                    >−</button>
+                    <span className="w-6 text-center text-sm font-black text-amber-800 tabular-nums">{storeQty}</span>
+                    <button
+                      onClick={() => setStoreQty(q => Math.min(24, q + 1))}
+                      className="w-8 h-8 rounded-xl text-amber-700 font-black text-lg hover:bg-amber-50 active:scale-90 transition-all"
+                      aria-label="병 수 늘리기"
+                    >+</button>
+                  </div>
+                </div>
+              )}
 
               {/* 🔍 자세한 정보 (보틀 백과) */}
               {(() => {
